@@ -2,6 +2,7 @@ import Foundation
 
 final class RemoteCalendarService: CalendarService {
     static let calendarURL = URL(string: "https://raw.githubusercontent.com/alex-morrisonn/tickr/main/tickr/SampleData/calendar.json")!
+    static let productionCacheLifetime: TimeInterval = 24 * 60 * 60
 
     private let session: URLSession
     private let fileManager: FileManager
@@ -9,17 +10,24 @@ final class RemoteCalendarService: CalendarService {
     private let encoder: JSONEncoder
     private let now: @Sendable () -> Date
     private let cacheLifetime: TimeInterval
+    private let bypassCache: Bool
+
+    #if DEBUG
+    var isBypassingCacheForTesting: Bool { bypassCache }
+    #endif
 
     init(
         session: URLSession = .shared,
         fileManager: FileManager = .default,
         now: @escaping @Sendable () -> Date = Date.init,
-        cacheLifetime: TimeInterval = 24 * 60 * 60
+        cacheLifetime: TimeInterval? = nil,
+        bypassCache: Bool? = nil
     ) {
         self.session = session
         self.fileManager = fileManager
         self.now = now
-        self.cacheLifetime = cacheLifetime
+        self.cacheLifetime = cacheLifetime ?? Self.productionCacheLifetime
+        self.bypassCache = bypassCache ?? Self.shouldBypassCacheForTesting
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -48,7 +56,7 @@ final class RemoteCalendarService: CalendarService {
 
     private func loadResponse(forceRefresh: Bool) async throws -> CalendarResponse {
         do {
-            if !forceRefresh, try isCacheFresh() {
+            if !forceRefresh, !bypassCache, try isCacheFresh() {
                 return try loadCachedResponse()
             }
 
@@ -153,6 +161,25 @@ final class RemoteCalendarService: CalendarService {
         return cachesDirectory
             .appendingPathComponent("tickr", isDirectory: true)
             .appendingPathComponent("calendar-cache.json")
+    }
+
+    private static var shouldBypassCacheForTesting: Bool {
+        #if DEBUG
+        let processInfo = ProcessInfo.processInfo
+        let arguments = processInfo.arguments.joined(separator: " ")
+        let envValue = processInfo.environment["TICKR_DISABLE_CALENDAR_CACHE"] ?? "nil"
+        print(
+            """
+            [Tickr Debug] cache config
+            arguments=\(arguments)
+            env.TICKR_DISABLE_CALENDAR_CACHE=\(envValue)
+            """
+        )
+        return processInfo.arguments.contains("-TickrDisableCalendarCache")
+            || processInfo.environment["TICKR_DISABLE_CALENDAR_CACHE"] == "1"
+        #else
+        return false
+        #endif
     }
 }
 

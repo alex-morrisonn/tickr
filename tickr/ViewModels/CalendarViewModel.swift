@@ -30,6 +30,7 @@ final class CalendarViewModel {
 
         do {
             events = try await service.fetchEvents(from: startDate, to: endDate)
+            logDebugState(context: "load")
         } catch {
             events = []
             errorMessage = error.localizedDescription
@@ -48,11 +49,42 @@ final class CalendarViewModel {
             } else {
                 events = try await service.fetchEvents(from: startDate, to: endDate)
             }
+            logDebugState(context: "refresh")
         } catch {
             events = []
             errorMessage = error.localizedDescription
         }
 
         isLoading = false
+    }
+
+    private func logDebugState(context: String) {
+        #if DEBUG
+        let timezone = TimeZone.current.identifier
+        let cacheBypass = (service as? RemoteCalendarService)?.isBypassingCacheForTesting ?? false
+
+        if let firstEvent = events.first {
+            let displayedTime = EventDateFormatter.timeFormatter.string(from: firstEvent.timestamp)
+            print(
+                """
+                [Tickr Debug] \(context)
+                timezone=\(timezone)
+                cacheBypass=\(cacheBypass)
+                firstEventID=\(firstEvent.id)
+                firstEventTimestamp=\(firstEvent.timestamp.ISO8601Format())
+                firstEventDisplayedTime=\(displayedTime)
+                """
+            )
+        } else {
+            print(
+                """
+                [Tickr Debug] \(context)
+                timezone=\(timezone)
+                cacheBypass=\(cacheBypass)
+                eventCount=0
+                """
+            )
+        }
+        #endif
     }
 }
