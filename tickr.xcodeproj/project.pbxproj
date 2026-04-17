@@ -34,6 +34,12 @@
 			children = (
 				1EC75FBA2F90E1C2003B6F09 /* tickr */,
 				1EC75FB92F90E1C2003B6F09 /* Products */,
+				1EC75FC62F90E296003B6F09 /* Models */,
+				1EC75FC72F90E296003B6F09 /* Services */,
+				1EC75FC82F90E296003B6F09 /* Views */,
+				1EC75FC92F90E296003B6F09 /* ViewModels */,
+				1EC75FCA2F90E296003B6F09 /* Utilities */,
+				1EC75FF22F9217C8003B6F09 /* SampleData */,
 			);
 			sourceTree = "<group>";
 		};
@@ -43,6 +49,48 @@
 				1EC75FB82F90E1C2003B6F09 /* tickr.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		1EC75FC62F90E296003B6F09 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		1EC75FC72F90E296003B6F09 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		1EC75FC82F90E296003B6F09 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		1EC75FC92F90E296003B6F09 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		1EC75FCA2F90E296003B6F09 /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Utilities;
+			sourceTree = "<group>";
+		};
+		1EC75FF22F9217C8003B6F09 /* SampleData */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = SampleData;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
