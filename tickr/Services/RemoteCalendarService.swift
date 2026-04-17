@@ -1,7 +1,7 @@
 import Foundation
 
 final class RemoteCalendarService: CalendarService {
-    static let calendarURL = URL(string: "https://raw.githubusercontent.com/MYUSERNAME/tickr-data/main/calendar.json")!
+    static let calendarURL = URL(string: "https://https://raw.githubusercontent.com/alex-morrisonn/tickr/refs/heads/main/tickr/SampleData/calendar.json")!
 
     private let session: URLSession
     private let fileManager: FileManager
