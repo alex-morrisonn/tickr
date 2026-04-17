@@ -56,7 +56,7 @@ struct CalendarView: View {
         .navigationTitle("Calendar")
         .task {
             guard viewModel.events.isEmpty else { return }
-            await viewModel.loadCurrentWeek()
+            await viewModel.refresh()
         }
         .refreshable {
             await viewModel.refresh()
