@@ -1,6 +1,6 @@
 import Foundation
 
-struct RemoteCalendarService: CalendarService {
+final class RemoteCalendarService: CalendarService {
     static let calendarURL = URL(string: "https://raw.githubusercontent.com/MYUSERNAME/tickr-data/main/calendar.json")!
 
     private let session: URLSession
@@ -14,7 +14,7 @@ struct RemoteCalendarService: CalendarService {
         session: URLSession = .shared,
         fileManager: FileManager = .default,
         now: @escaping @Sendable () -> Date = Date.init,
-        cacheLifetime: TimeInterval = 6 * 60 * 60
+        cacheLifetime: TimeInterval = 24 * 60 * 60
     ) {
         self.session = session
         self.fileManager = fileManager
@@ -31,21 +31,40 @@ struct RemoteCalendarService: CalendarService {
     }
 
     func fetchEvents(from startDate: Date, to endDate: Date) async throws -> [EconomicEvent] {
+        let response = try await loadResponse(forceRefresh: false)
+        return filteredEvents(from: response.events, startDate: startDate, endDate: endDate)
+    }
+
+    func refreshEvents(from startDate: Date, to endDate: Date) async throws -> [EconomicEvent] {
+        let response = try await loadResponse(forceRefresh: true)
+        return filteredEvents(from: response.events, startDate: startDate, endDate: endDate)
+    }
+
+    private func filteredEvents(from events: [EconomicEvent], startDate: Date, endDate: Date) -> [EconomicEvent] {
+        events
+            .filter { $0.timestamp >= startDate && $0.timestamp <= endDate }
+            .sorted { $0.timestamp < $1.timestamp }
+    }
+
+    private func loadResponse(forceRefresh: Bool) async throws -> CalendarResponse {
         do {
-            if try isCacheFresh() {
-                let response = try loadCachedResponse()
-                return filteredEvents(from: response.events, startDate: startDate, endDate: endDate)
+            if !forceRefresh, try isCacheFresh() {
+                return try loadCachedResponse()
             }
 
-            let response = try await fetchRemoteResponse()
-            try cache(response: response)
-            return filteredEvents(from: response.events, startDate: startDate, endDate: endDate)
+            let remoteResponse = try await fetchRemoteResponse()
+            try cache(response: remoteResponse)
+            return remoteResponse
         } catch {
             if let cachedResponse = try? loadCachedResponse() {
-                return filteredEvents(from: cachedResponse.events, startDate: startDate, endDate: endDate)
+                return cachedResponse
             }
 
-            throw RemoteCalendarServiceError.noCachedData
+            if let bundledResponse = try? loadBundledResponse() {
+                return bundledResponse
+            }
+
+            throw RemoteCalendarServiceError.noDataAvailable
         }
     }
 
@@ -75,10 +94,29 @@ struct RemoteCalendarService: CalendarService {
         }
     }
 
-    private func filteredEvents(from events: [EconomicEvent], startDate: Date, endDate: Date) -> [EconomicEvent] {
-        events
-            .filter { $0.timestamp >= startDate && $0.timestamp <= endDate }
-            .sorted { $0.timestamp < $1.timestamp }
+    private func loadBundledResponse() throws -> CalendarResponse {
+        guard let fileURL = Bundle.main.url(forResource: "calendar", withExtension: "json", subdirectory: "SampleData")
+            ?? Bundle.main.url(forResource: "calendar", withExtension: "json")
+        else {
+            throw RemoteCalendarServiceError.missingBundledFile
+        }
+
+        let data = try Data(contentsOf: fileURL)
+        do {
+            return try decoder.decode(CalendarResponse.self, from: data)
+        } catch {
+            throw RemoteCalendarServiceError.invalidPayload
+        }
+    }
+
+    private func loadCachedResponse() throws -> CalendarResponse {
+        let data = try Data(contentsOf: cacheFileURL())
+
+        do {
+            return try decoder.decode(CalendarResponse.self, from: data)
+        } catch {
+            throw RemoteCalendarServiceError.invalidPayload
+        }
     }
 
     private func cache(response: CalendarResponse) throws {
@@ -91,16 +129,6 @@ struct RemoteCalendarService: CalendarService {
         }
 
         try data.write(to: cacheURL, options: .atomic)
-    }
-
-    private func loadCachedResponse() throws -> CalendarResponse {
-        let data = try Data(contentsOf: cacheFileURL())
-
-        do {
-            return try decoder.decode(CalendarResponse.self, from: data)
-        } catch {
-            throw RemoteCalendarServiceError.invalidPayload
-        }
     }
 
     private func isCacheFresh() throws -> Bool {
@@ -130,23 +158,26 @@ struct RemoteCalendarService: CalendarService {
 
 enum RemoteCalendarServiceError: LocalizedError {
     case cacheUnavailable
+    case missingBundledFile
     case invalidResponse
     case invalidPayload
     case requestFailed(statusCode: Int)
-    case noCachedData
+    case noDataAvailable
 
     var errorDescription: String? {
         switch self {
         case .cacheUnavailable:
-            return "The local calendar cache is unavailable. Pull to refresh to try again."
+            return "The local calendar cache is unavailable."
+        case .missingBundledFile:
+            return "The bundled calendar.json file could not be found."
         case .invalidResponse:
-            return "The calendar feed returned an invalid response. Pull to refresh to try again."
+            return "The remote calendar returned an invalid response."
         case .invalidPayload:
-            return "The calendar feed JSON could not be parsed. Pull to refresh to try again."
+            return "The calendar.json file could not be parsed."
         case let .requestFailed(statusCode):
-            return "The calendar feed request failed with status \(statusCode). Pull to refresh to try again."
-        case .noCachedData:
-            return "No cached calendar data is available yet. Pull to refresh to try again."
+            return "The remote calendar request failed with status \(statusCode)."
+        case .noDataAvailable:
+            return "No calendar data is available. Pull to refresh to try again."
         }
     }
 }

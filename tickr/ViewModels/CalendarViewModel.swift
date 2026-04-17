@@ -10,7 +10,7 @@ final class CalendarViewModel {
     var isLoading = false
     var errorMessage: String?
 
-    init(service: CalendarService = RemoteCalendarService()) {
+    init(service: CalendarService) {
         self.service = service
     }
 
@@ -21,7 +21,7 @@ final class CalendarViewModel {
 
     func refresh() async {
         let interval = Calendar.currentWeekIntervalInUTC()
-        await load(from: interval.start, to: interval.end)
+        await refresh(from: interval.start, to: interval.end)
     }
 
     private func load(from startDate: Date, to endDate: Date) async {
@@ -30,6 +30,24 @@ final class CalendarViewModel {
 
         do {
             events = try await service.fetchEvents(from: startDate, to: endDate)
+        } catch {
+            events = []
+            errorMessage = error.localizedDescription
+        }
+
+        isLoading = false
+    }
+
+    private func refresh(from startDate: Date, to endDate: Date) async {
+        isLoading = true
+        errorMessage = nil
+
+        do {
+            if let remoteService = service as? RemoteCalendarService {
+                events = try await remoteService.refreshEvents(from: startDate, to: endDate)
+            } else {
+                events = try await service.fetchEvents(from: startDate, to: endDate)
+            }
         } catch {
             events = []
             errorMessage = error.localizedDescription
