@@ -10,7 +10,7 @@ enum ImpactLevel: String, Codable, CaseIterable, Identifiable {
     var color: Color {
         switch self {
         case .low:
-            .mint
+            .gray
         case .medium:
             .orange
         case .high:
@@ -20,5 +20,16 @@ enum ImpactLevel: String, Codable, CaseIterable, Identifiable {
 
     var label: String {
         rawValue.capitalized
+    }
+
+    var rank: Int {
+        switch self {
+        case .low:
+            0
+        case .medium:
+            1
+        case .high:
+            2
+        }
     }
 }

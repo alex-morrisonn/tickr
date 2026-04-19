@@ -9,47 +9,49 @@ final class CalendarViewModel {
     var events: [EconomicEvent] = []
     var isLoading = false
     var errorMessage: String?
+    var lastRefreshDate: Date?
+    var visibleInterval: DateInterval?
 
     init(service: CalendarService) {
         self.service = service
     }
 
     func loadCurrentWeek() async {
-        let interval = Calendar.currentWeekIntervalInUTC()
-        await load(from: interval.start, to: interval.end)
+        let interval = Calendar.tradingWeekInterval()
+        await load(interval: interval, forceRefresh: false)
     }
 
     func refresh() async {
-        let interval = Calendar.currentWeekIntervalInUTC()
-        await refresh(from: interval.start, to: interval.end)
+        let interval = visibleInterval ?? Calendar.tradingWeekInterval()
+        await load(interval: interval, forceRefresh: true)
     }
 
-    private func load(from startDate: Date, to endDate: Date) async {
-        isLoading = true
-        errorMessage = nil
+    func loadWeek(referenceDate: Date = Date(), weekOffset: Int = 0) async {
+        let interval = Calendar.tradingWeekInterval(referenceDate: referenceDate, weekOffset: weekOffset)
+        await load(interval: interval, forceRefresh: false)
+    }
 
-        do {
-            events = try await service.fetchEvents(from: startDate, to: endDate)
-            logDebugState(context: "load")
-        } catch {
-            events = []
-            errorMessage = error.localizedDescription
+    func clearCache() throws {
+        guard service is RemoteCalendarService else {
+            return
         }
 
-        isLoading = false
+        try RemoteCalendarService.clearCache()
+        lastRefreshDate = nil
     }
 
-    private func refresh(from startDate: Date, to endDate: Date) async {
+    private func load(interval: DateInterval, forceRefresh: Bool) async {
         isLoading = true
         errorMessage = nil
+        visibleInterval = interval
 
         do {
-            if let remoteService = service as? RemoteCalendarService {
-                events = try await remoteService.refreshEvents(from: startDate, to: endDate)
+            if forceRefresh, let remoteService = service as? RemoteCalendarService {
+                events = try await remoteService.refreshEvents(from: interval.start, to: interval.end)
             } else {
-                events = try await service.fetchEvents(from: startDate, to: endDate)
+                events = try await service.fetchEvents(from: interval.start, to: interval.end)
             }
-            logDebugState(context: "refresh")
+            lastRefreshDate = Date()
         } catch {
             events = []
             errorMessage = error.localizedDescription
@@ -58,33 +60,21 @@ final class CalendarViewModel {
         isLoading = false
     }
 
-    private func logDebugState(context: String) {
-        #if DEBUG
-        let timezone = TimeZone.current.identifier
-        let cacheBypass = (service as? RemoteCalendarService)?.isBypassingCacheForTesting ?? false
+    var availableCurrencies: [String] {
+        Array(Set(events.map(\.currencyCode))).sorted()
+    }
 
-        if let firstEvent = events.first {
-            let displayedTime = EventDateFormatter.timeFormatter.string(from: firstEvent.timestamp)
-            print(
-                """
-                [Tickr Debug] \(context)
-                timezone=\(timezone)
-                cacheBypass=\(cacheBypass)
-                firstEventID=\(firstEvent.id)
-                firstEventTimestamp=\(firstEvent.timestamp.ISO8601Format())
-                firstEventDisplayedTime=\(displayedTime)
-                """
-            )
-        } else {
-            print(
-                """
-                [Tickr Debug] \(context)
-                timezone=\(timezone)
-                cacheBypass=\(cacheBypass)
-                eventCount=0
-                """
-            )
-        }
-        #endif
+    var availablePairSymbols: [String] {
+        Array(Set(events.flatMap(\.relatedPairs))).sorted()
+    }
+
+    func events(forPair symbol: String) -> [EconomicEvent] {
+        events.filter { $0.relatedPairs.contains(symbol) }
+    }
+
+    func nextEvent(forPair symbol: String, now: Date = Date()) -> EconomicEvent? {
+        events(forPair: symbol)
+            .filter { $0.timestamp >= now }
+            .min { $0.timestamp < $1.timestamp }
     }
 }

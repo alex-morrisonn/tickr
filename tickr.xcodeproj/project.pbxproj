@@ -6,7 +6,12 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		1E8763C12F94D086001B4284 /* NotificationAuthorizationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E8763BF2F94D086001B4284 /* NotificationAuthorizationStore.swift */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
+		1E8763BF2F94D086001B4284 /* NotificationAuthorizationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationAuthorizationStore.swift; sourceTree = "<group>"; };
 		1EC75FB82F90E1C2003B6F09 /* tickr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = tickr.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -82,6 +87,7 @@
 		1EC75FCA2F90E296003B6F09 /* Utilities */ = {
 			isa = PBXGroup;
 			children = (
+				1E8763BF2F94D086001B4284 /* NotificationAuthorizationStore.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -167,6 +173,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1E8763C12F94D086001B4284 /* NotificationAuthorizationStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

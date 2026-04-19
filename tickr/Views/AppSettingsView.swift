@@ -1,0 +1,534 @@
+import SwiftUI
+import UserNotifications
+
+@MainActor
+struct AppSettingsView: View {
+    let viewModel: CalendarViewModel
+    @Bindable var preferences: UserPreferences
+
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openURL) private var openURL
+    @State private var cacheMessage: String?
+    @State private var notificationMessage: String?
+    @State private var notificationAuthorizationStatus: UNAuthorizationStatus = .notDetermined
+
+    private let notificationLeadTimeOptions = [0, 5, 10, 15, 30, 45, 60]
+    private let manualTimeZoneOptions = [
+        "UTC",
+        "America/New_York",
+        "America/Los_Angeles",
+        "Europe/London",
+        "Europe/Zurich",
+        "Asia/Tokyo",
+        "Asia/Singapore",
+        "Australia/Sydney"
+    ]
+
+    var body: some View {
+        ScrollView {
+            TickrScreen {
+                VStack(alignment: .leading, spacing: TickrLayout.sectionSpacing) {
+                    TickrSectionHeader(
+                        eyebrow: "Preferences",
+                        title: "Settings",
+                        subtitle: "Notifications, display defaults, data controls, and account links."
+                    )
+
+                    notificationPreferencesCard
+                    displayPreferencesCard
+                    dataCard
+                    aboutCard
+                }
+            }
+        }
+        .background(Color.clear)
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await refreshNotificationAuthorizationStatus()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active else { return }
+
+            Task {
+                await refreshNotificationAuthorizationStatus()
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text("Tickr")
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .foregroundStyle(TickrPalette.text)
+            }
+        }
+        .alert("Cache", isPresented: cacheAlertBinding) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(cacheMessage ?? "")
+        }
+        .alert("Notifications", isPresented: notificationAlertBinding) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(notificationMessage ?? "")
+        }
+    }
+
+    private var notificationPreferencesCard: some View {
+        TickrCard {
+            VStack(alignment: .leading, spacing: 18) {
+                Text("Notification Preferences")
+                    .font(.headline)
+                    .foregroundStyle(TickrPalette.text)
+
+                TickrInfoRow(label: "System access", value: notificationAuthorizationLabel)
+
+                Button {
+                    Task {
+                        await handleNotificationAccessAction()
+                    }
+                } label: {
+                    settingsActionButtonLabel(
+                        title: notificationAuthorizationActionTitle,
+                        tint: notificationAuthorizationStatus == .denied ? Color.orange.opacity(0.82) : TickrPalette.accent
+                    )
+                }
+                .buttonStyle(.plain)
+
+                leadTimePicker(title: "High impact", selection: $preferences.highImpactNotificationLeadTimeMinutes)
+                leadTimePicker(title: "Medium impact", selection: $preferences.mediumImpactNotificationLeadTimeMinutes)
+                leadTimePicker(title: "Low impact", selection: $preferences.lowImpactNotificationLeadTimeMinutes)
+
+                TickrInfoRow(label: "Per-event override", value: "Available from the Event Detail screen")
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Sound")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(TickrPalette.text)
+
+                    Picker("Sound", selection: $preferences.notificationSoundOption) {
+                        ForEach(NotificationSoundOption.allCases) { option in
+                            Text(option.label).tag(option)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                TickrToggleRow(
+                    title: "Quiet hours",
+                    subtitle: "Suppress reminders during your off-session hours.",
+                    isOn: $preferences.quietHoursEnabled
+                )
+
+                if preferences.quietHoursEnabled {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 16) {
+                            quietHoursPicker(title: "From", selection: quietHoursBinding(isStart: true))
+                            quietHoursPicker(title: "To", selection: quietHoursBinding(isStart: false))
+                        }
+
+                        VStack(spacing: 12) {
+                            quietHoursPicker(title: "From", selection: quietHoursBinding(isStart: true))
+                            quietHoursPicker(title: "To", selection: quietHoursBinding(isStart: false))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var displayPreferencesCard: some View {
+        TickrCard {
+            VStack(alignment: .leading, spacing: 18) {
+                Text("Display Preferences")
+                    .font(.headline)
+                    .foregroundStyle(TickrPalette.text)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Timezone display")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(TickrPalette.text)
+
+                    Picker(
+                        "Timezone",
+                        selection: Binding(
+                            get: { preferences.manualTimeZoneIdentifier ?? "auto" },
+                            set: { preferences.manualTimeZoneIdentifier = $0 == "auto" ? nil : $0 }
+                        )
+                    ) {
+                        Text("Auto-detect").tag("auto")
+                        ForEach(manualTimeZoneOptions, id: \.self) { identifier in
+                            Text(timeZoneLabel(for: identifier)).tag(identifier)
+                        }
+                    }
+                    .pickerStyle(.menu)
+
+                    Text("Current: \(timeZoneLabel(for: preferences.effectiveTimeZone.identifier))")
+                        .font(.caption)
+                        .foregroundStyle(TickrPalette.muted)
+                }
+
+                TickrToggleRow(
+                    title: "Use 24-hour time",
+                    subtitle: "Switch between compact and standard time formatting.",
+                    isOn: $preferences.use24HourTime
+                )
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Default impact filter")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(TickrPalette.text)
+
+                    Picker("Impact", selection: $preferences.minimumImpact) {
+                        ForEach(ImpactLevel.allCases.reversed(), id: \.id) { level in
+                            Text(level.label).tag(level)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Appearance")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(TickrPalette.text)
+
+                    Picker("Appearance", selection: $preferences.preferredAppearance) {
+                        ForEach(AppAppearance.allCases) { mode in
+                            Text(mode.label).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+            }
+        }
+    }
+
+    private var dataCard: some View {
+        TickrCard {
+            VStack(alignment: .leading, spacing: 18) {
+                Text("Data & Cache")
+                    .font(.headline)
+                    .foregroundStyle(TickrPalette.text)
+
+                TickrInfoRow(
+                    label: "Last updated",
+                    value: viewModel.lastRefreshDate.map {
+                        RelativeDateTimeFormatter().localizedString(for: $0, relativeTo: Date())
+                    } ?? "Not refreshed yet"
+                )
+
+                TickrInfoRow(label: "Source", value: "Tickr calendar feed")
+
+                Button {
+                    Task {
+                        await viewModel.refresh()
+                    }
+                } label: {
+                    settingsActionButtonLabel(title: "Refresh Now", tint: TickrPalette.accent)
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    do {
+                        try viewModel.clearCache()
+                        cacheMessage = "Calendar cache cleared."
+                    } catch {
+                        cacheMessage = error.localizedDescription
+                    }
+                } label: {
+                    settingsActionButtonLabel(title: "Clear Cache", tint: Color.red.opacity(0.82))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var aboutCard: some View {
+        TickrCard {
+            VStack(alignment: .leading, spacing: 18) {
+                Text("About & Feedback")
+                    .font(.headline)
+                    .foregroundStyle(TickrPalette.text)
+
+                TickrInfoRow(label: "App version", value: appVersion)
+
+                settingsLinkButton(title: "Send Feedback", action: {
+                    openURL(URL(string: "mailto:feedback@tickr.app?subject=Tickr%20Feedback")!)
+                })
+
+                if preferences.shouldShowRateAction {
+                    settingsLinkButton(title: "Rate on App Store", action: {
+                        openURL(URL(string: "https://apps.apple.com/app/id0000000000?action=write-review")!)
+                    })
+                } else {
+                    TickrInfoRow(label: "Rate on App Store", value: "Available after 2 weeks of use")
+                }
+
+                settingsLinkButton(title: "X / Twitter", action: {
+                    openURL(URL(string: "https://x.com/tickrapp")!)
+                })
+
+                settingsLinkButton(title: "YouTube", action: {
+                    openURL(URL(string: "https://www.youtube.com/@tickrapp")!)
+                })
+
+                settingsLinkButton(title: "Privacy Policy", action: {
+                    openURL(URL(string: AppExternalLinks.privacyPolicyURL)!)
+                })
+
+                settingsLinkButton(title: "Terms of Service", action: {
+                    openURL(URL(string: AppExternalLinks.termsOfServiceURL)!)
+                })
+
+                settingsLinkButton(title: "Support", action: {
+                    openURL(URL(string: AppExternalLinks.supportURL)!)
+                })
+            }
+        }
+    }
+
+    private func leadTimePicker(title: String, selection: Binding<Int>) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(TickrPalette.text)
+
+            Picker(title, selection: selection) {
+                ForEach(notificationLeadTimeOptions, id: \.self) { minutes in
+                    Text(leadTimeLabel(minutes)).tag(minutes)
+                }
+            }
+            .pickerStyle(.segmented)
+        }
+    }
+
+    private func quietHoursPicker(title: String, selection: Binding<Date>) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title.uppercased())
+                .font(.caption2.weight(.semibold))
+                .tracking(1)
+                .foregroundStyle(TickrPalette.muted)
+
+            DatePicker(title, selection: selection, displayedComponents: .hourAndMinute)
+                .labelsHidden()
+                .datePickerStyle(.compact)
+                .tint(TickrPalette.accent)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(TickrPalette.surfaceStrong)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .stroke(TickrPalette.stroke, lineWidth: 1)
+                        }
+                )
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func quietHoursBinding(isStart: Bool) -> Binding<Date> {
+        Binding(
+            get: { dateFromMinutes(isStart ? preferences.quietHoursStartMinutes : preferences.quietHoursEndMinutes) },
+            set: { newDate in
+                if isStart {
+                    preferences.quietHoursStartMinutes = minutesFromDate(newDate)
+                } else {
+                    preferences.quietHoursEndMinutes = minutesFromDate(newDate)
+                }
+            }
+        )
+    }
+
+    private func dateFromMinutes(_ minutes: Int) -> Date {
+        let startOfDay = Calendar.current.startOfDay(for: Date())
+        return Calendar.current.date(byAdding: .minute, value: minutes, to: startOfDay) ?? Date()
+    }
+
+    private func minutesFromDate(_ date: Date) -> Int {
+        let components = Calendar.current.dateComponents([.hour, .minute], from: date)
+        return (components.hour ?? 0) * 60 + (components.minute ?? 0)
+    }
+
+    private func timeZoneLabel(for identifier: String) -> String {
+        guard let timeZone = TimeZone(identifier: identifier) else {
+            return identifier
+        }
+
+        let short = timeZone.localizedName(for: .shortStandard, locale: .current) ?? identifier
+        return "\(identifier.replacingOccurrences(of: "_", with: " ")) (\(short))"
+    }
+
+    private func leadTimeLabel(_ minutes: Int) -> String {
+        if minutes == 0 {
+            return "Off"
+        }
+        if minutes == 60 {
+            return "1h"
+        }
+        return "\(minutes)m"
+    }
+
+    private var appVersion: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
+        return "\(version) (\(build))"
+    }
+
+    private func settingsActionButtonLabel(title: String, tint: Color) -> some View {
+        Text(title)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(Color.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(tint)
+            )
+    }
+
+    private func settingsLinkButton(title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(TickrPalette.text)
+                Spacer()
+                Image(systemName: "arrow.up.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(TickrPalette.muted)
+            }
+            .padding(.vertical, 2)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var cacheAlertBinding: Binding<Bool> {
+        Binding(
+            get: { cacheMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    cacheMessage = nil
+                }
+            }
+        )
+    }
+
+    private var notificationAlertBinding: Binding<Bool> {
+        Binding(
+            get: { notificationMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    notificationMessage = nil
+                }
+            }
+        )
+    }
+
+    private func handleNotificationAccessAction() async {
+        switch notificationAuthorizationStatus {
+        case .denied:
+            NotificationAuthorizationStore.openSystemSettings()
+        case .authorized, .provisional, .ephemeral:
+            notificationMessage = "Notifications are already enabled for Tickr."
+        case .notDetermined:
+            do {
+                let granted = try await NotificationAuthorizationStore.requestAuthorizationIfNeeded()
+                await refreshNotificationAuthorizationStatus()
+                notificationMessage = granted ? "Notifications enabled for Tickr." : "Notifications are disabled for Tickr."
+            } catch {
+                notificationMessage = error.localizedDescription
+            }
+        @unknown default:
+            notificationMessage = "Unable to determine notification status."
+        }
+    }
+
+    private func refreshNotificationAuthorizationStatus() async {
+        notificationAuthorizationStatus = await NotificationAuthorizationStore.authorizationStatus()
+    }
+
+    private var notificationAuthorizationLabel: String {
+        switch notificationAuthorizationStatus {
+        case .authorized:
+            "Allowed"
+        case .provisional:
+            "Allowed silently"
+        case .ephemeral:
+            "Temporarily allowed"
+        case .denied:
+            "Blocked in system settings"
+        case .notDetermined:
+            "Not requested yet"
+        @unknown default:
+            "Unknown"
+        }
+    }
+
+    private var notificationAuthorizationActionTitle: String {
+        switch notificationAuthorizationStatus {
+        case .denied:
+            "Open System Settings"
+        case .authorized, .provisional, .ephemeral:
+            "Notifications Enabled"
+        case .notDetermined:
+            "Enable Notifications"
+        @unknown default:
+            "Check Notifications"
+        }
+    }
+}
+
+private enum AppExternalLinks {
+    static let githubRepository = "https://github.com/alex-morrisonn/tickr"
+    static let privacyPolicyURL = githubRepository + "/blob/main/Legal/Privacy-Policy.md"
+    static let termsOfServiceURL = githubRepository + "/blob/main/Legal/Terms-of-Service.md"
+    static let supportURL = githubRepository + "/blob/main/Legal/Support.md"
+}
+
+#Preview {
+    NavigationStack {
+        AppSettingsView(
+            viewModel: CalendarViewModel(service: MockCalendarService()),
+            preferences: UserPreferences()
+        )
+    }
+}
+
+private struct TickrToggleRow: View {
+    let title: String
+    let subtitle: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 16) {
+                copy
+                Spacer(minLength: 20)
+                toggle
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                copy
+                toggle
+            }
+        }
+    }
+
+    private var copy: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(TickrPalette.text)
+
+            Text(subtitle)
+                .font(.caption)
+                .foregroundStyle(TickrPalette.muted)
+        }
+    }
+
+    private var toggle: some View {
+        Toggle("", isOn: $isOn)
+            .labelsHidden()
+            .tint(TickrPalette.accent)
+    }
+}

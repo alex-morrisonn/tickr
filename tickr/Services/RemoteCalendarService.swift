@@ -12,10 +12,6 @@ final class RemoteCalendarService: CalendarService {
     private let cacheLifetime: TimeInterval
     private let bypassCache: Bool
 
-    #if DEBUG
-    var isBypassingCacheForTesting: Bool { bypassCache }
-    #endif
-
     init(
         session: URLSession = .shared,
         fileManager: FileManager = .default,
@@ -27,7 +23,7 @@ final class RemoteCalendarService: CalendarService {
         self.fileManager = fileManager
         self.now = now
         self.cacheLifetime = cacheLifetime ?? Self.productionCacheLifetime
-        self.bypassCache = bypassCache ?? Self.shouldBypassCacheForTesting
+        self.bypassCache = bypassCache ?? Self.shouldBypassCacheFromRuntimeConfiguration
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -163,18 +159,23 @@ final class RemoteCalendarService: CalendarService {
             .appendingPathComponent("calendar-cache.json")
     }
 
-    private static var shouldBypassCacheForTesting: Bool {
+    static func clearCache(fileManager: FileManager = .default) throws {
+        guard let cachesDirectory = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first else {
+            throw RemoteCalendarServiceError.cacheUnavailable
+        }
+
+        let cacheURL = cachesDirectory
+            .appendingPathComponent("tickr", isDirectory: true)
+            .appendingPathComponent("calendar-cache.json")
+
+        if fileManager.fileExists(atPath: cacheURL.path) {
+            try fileManager.removeItem(at: cacheURL)
+        }
+    }
+
+    private static var shouldBypassCacheFromRuntimeConfiguration: Bool {
         #if DEBUG
         let processInfo = ProcessInfo.processInfo
-        let arguments = processInfo.arguments.joined(separator: " ")
-        let envValue = processInfo.environment["TICKR_DISABLE_CALENDAR_CACHE"] ?? "nil"
-        print(
-            """
-            [Tickr Debug] cache config
-            arguments=\(arguments)
-            env.TICKR_DISABLE_CALENDAR_CACHE=\(envValue)
-            """
-        )
         return processInfo.arguments.contains("-TickrDisableCalendarCache")
             || processInfo.environment["TICKR_DISABLE_CALENDAR_CACHE"] == "1"
         #else
