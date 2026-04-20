@@ -4,7 +4,7 @@ Last updated: January 30, 2026
 
 ## Overview
 
-Tickr is an economic calendar and market session reminder app for traders. This Privacy Policy explains what information Tickr processes, how that information is used, and the choices available to people who use the app.
+Tickr is an economic calendar and market session reminder app for traders. This Privacy Policy explains what information Tickr processes, how that information is used, and the choices available to you when you use the app.
 
 If you have questions about this policy, contact: `privacy@tickr.app`
 
@@ -12,17 +12,17 @@ If you have questions about this policy, contact: `privacy@tickr.app`
 
 Tickr is designed to minimize data collection.
 
-Tickr processes the following categories of information on-device:
+Tickr processes the following information on your device:
 
 - App preferences, such as watched pairs, notification lead times, quiet hours, onboarding completion, timezone display, and appearance settings.
 - Notification preferences required to schedule local reminders on the device.
 - Cached copies of the economic calendar feed used to improve performance and offline resilience.
 
-Tickr also retrieves economic calendar content from a remote JSON feed when refreshing market events.
+Tickr also retrieves economic calendar content from a remote feed when you refresh market events.
 
 ## Information Tickr Does Not Collect
 
-As shipped in this repository, Tickr does not intentionally collect, sell, or broker personal information such as:
+Tickr does not intentionally collect, sell, or broker personal information such as:
 
 - Name
 - Email address
@@ -33,13 +33,13 @@ As shipped in this repository, Tickr does not intentionally collect, sell, or br
 - Payment information
 - Advertising identifiers
 
-Tickr does not use third-party advertising SDKs or analytics SDKs in this codebase.
+Tickr does not use third-party advertising SDKs or analytics SDKs.
 
 ## Notifications
 
 Tickr can send local notifications on your device for economic events and trading session reminders if you grant notification permission.
 
-These notifications are generated from your on-device settings and calendar data. You can turn notifications off at any time in iOS Settings or in the app’s preferences.
+These notifications are generated from your on-device settings and calendar data. You can turn notifications off at any time in the app or in iOS Settings.
 
 ## Data Storage
 
@@ -49,9 +49,9 @@ Tickr may store a cached calendar response in the app’s cache directory to red
 
 ## Data Sharing
 
-As shipped in this repository, Tickr does not share your personal data with third parties for advertising, marketing, or data brokerage purposes.
+Tickr does not share your personal data with third parties for advertising, marketing, or data brokerage purposes.
 
-Network requests are limited to fetching the app’s market calendar feed and opening links you explicitly choose, such as email, social, YouTube, privacy policy, or terms links.
+Network requests are limited to fetching the app’s market calendar feed and opening links you choose, such as email, social, YouTube, privacy policy, terms, or support links.
 
 ## Data Retention
 
@@ -74,11 +74,11 @@ Tickr is not directed to children under 13, and this app is not intended to know
 
 ## International Users
 
-If Tickr is made available outside your home country or region, your use of the app may involve network requests to infrastructure located in other jurisdictions.
+If you use Tickr outside your home country or region, the app may send network requests to infrastructure located in other jurisdictions.
 
 ## Changes to This Policy
 
-This Privacy Policy may be updated to reflect product, legal, or operational changes. The updated version should be posted at the app’s published privacy policy URL and dated accordingly.
+This Privacy Policy may be updated to reflect product, legal, or operational changes. When that happens, the updated version will be posted at the app’s published privacy policy URL and dated accordingly.
 
 ## Contact
 

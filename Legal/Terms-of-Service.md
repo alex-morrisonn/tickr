@@ -6,7 +6,7 @@ Last updated: January 30, 2026
 
 These Terms of Service govern your use of Tickr. By downloading, accessing, or using Tickr, you agree to these terms.
 
-If you do not agree, do not use the app.
+If you do not agree to these terms, please do not use the app.
 
 ## Use of the App
 
@@ -29,15 +29,15 @@ All information provided by Tickr is for general informational purposes only and
 
 Economic calendar data, event times, forecasts, and related content may be delayed, incomplete, inaccurate, or unavailable.
 
-Tickr does not guarantee the accuracy, completeness, or timeliness of any market information or reminders. Notification delivery also depends on Apple platform behavior, device settings, network conditions, focus modes, battery state, and other external factors.
+Tickr does not guarantee the accuracy, completeness, or timeliness of any market information or reminders. Notification delivery also depends on Apple platform behavior, your device settings, network conditions, Focus modes, battery state, and other external factors.
 
 ## User Settings and Device Permissions
 
-Certain features depend on permissions and device configuration, including notification permissions. You are responsible for reviewing your device settings and confirming reminders are configured as expected.
+Certain features depend on permissions and device configuration, including notification permissions. You are responsible for reviewing your device settings and confirming reminders are set up the way you want.
 
 ## Intellectual Property
 
-Tickr and its related branding, software, design, and content created by the developer are protected by applicable intellectual property laws.
+Tickr and its related branding, software, design, and content are protected by applicable intellectual property laws.
 
 You receive a limited, non-exclusive, non-transferable, revocable license to use Tickr for personal, lawful use.
 
@@ -53,23 +53,23 @@ To the maximum extent permitted by law, Tickr is provided on an "as is" and "as 
 
 ## Limitation of Liability
 
-To the maximum extent permitted by law, Tickr and its developer will not be liable for any indirect, incidental, special, consequential, exemplary, or punitive damages, or for any loss of profits, revenue, trading opportunities, goodwill, data, or other intangible losses arising out of or related to your use of the app.
+To the maximum extent permitted by law, Tickr will not be liable for any indirect, incidental, special, consequential, exemplary, or punitive damages, or for any loss of profits, revenue, trading opportunities, goodwill, data, or other intangible losses arising out of or related to your use of the app.
 
 If applicable law does not allow the exclusion of certain damages, liability will be limited to the maximum extent permitted by law.
 
 ## Termination
 
-These terms remain in effect until terminated. The developer may suspend or terminate access to Tickr at any time if necessary to protect the app, comply with law, or prevent misuse.
+These terms remain in effect until terminated. Access to Tickr may be suspended or ended at any time if needed to protect the app, comply with law, or prevent misuse.
 
 You may stop using Tickr at any time by uninstalling the app.
 
 ## Changes to the Service or Terms
 
-Tickr may modify or discontinue features at any time. These terms may also be updated from time to time. Continued use of the app after updated terms are published constitutes acceptance of the revised terms.
+Tickr may modify or discontinue features at any time. These terms may also be updated from time to time. If you continue using the app after updated terms are published, you accept the revised terms.
 
 ## Governing Law
 
-These terms are governed by the laws applicable in the jurisdiction where the developer operates, excluding conflict-of-law principles, unless otherwise required by applicable consumer law.
+These terms are governed by the laws applicable in the jurisdiction where Tickr operates, excluding conflict-of-law principles, unless otherwise required by applicable consumer law.
 
 ## Apple Terms
 

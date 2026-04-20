@@ -91,7 +91,7 @@ struct OnboardingView: View {
                 .font(.system(size: 30, weight: .bold, design: .rounded))
                 .foregroundStyle(TickrPalette.text)
 
-            Text("Know every market-moving event before it happens. Built for forex, futures, and day traders.")
+            Text("Stay ahead of market-moving events with a calendar built for forex, futures, and active traders.")
                 .font(.headline)
                 .foregroundStyle(TickrPalette.muted)
 
@@ -106,11 +106,11 @@ struct OnboardingView: View {
 
     private var pairsStep: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("What do you trade?")
+            Text("Which pairs do you follow?")
                 .font(.system(size: 28, weight: .bold, design: .rounded))
                 .foregroundStyle(TickrPalette.text)
 
-            Text("You can always change these later.")
+            Text("Choose the pairs you want Tickr to prioritize. You can update this anytime.")
                 .font(.subheadline)
                 .foregroundStyle(TickrPalette.muted)
 
@@ -155,17 +155,17 @@ struct OnboardingView: View {
         VStack(alignment: .leading, spacing: 18) {
             Spacer(minLength: 20)
 
-            Text("Never miss a market mover")
+            Text("Stay ready for key events")
                 .font(.system(size: 30, weight: .bold, design: .rounded))
                 .foregroundStyle(TickrPalette.text)
 
-            Text("Tickr can alert you before high-impact events. We recommend 30 minutes before.")
+            Text("Turn on alerts to get a heads-up before high-impact events. A 30-minute reminder works well for most traders.")
                 .font(.headline)
                 .foregroundStyle(TickrPalette.muted)
 
             TickrCard {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("System access")
+                    Text("Notification access")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(TickrPalette.text)
 
@@ -186,7 +186,7 @@ struct OnboardingView: View {
             Button {
                 finishOnboarding()
             } label: {
-                Text("Maybe Later")
+                Text("Set Up Later")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(TickrPalette.muted)
                     .frame(maxWidth: .infinity)
@@ -268,13 +268,13 @@ struct OnboardingView: View {
     private var notificationStatusCopy: String {
         switch notificationAuthorizationStatus {
         case .denied:
-            "Notifications are currently blocked for Tickr. Open Settings to allow alerts, then return here to continue."
+            "Notifications are turned off for Tickr. Open Settings to allow alerts, then come back to finish setup."
         case .authorized, .provisional, .ephemeral:
-            "Tickr is allowed to send alerts on this device."
+            "Tickr can send alerts on this device."
         case .notDetermined:
-            "You have not decided yet. Tickr will request permission when you continue."
+            "Tickr will ask for notification permission when you continue."
         @unknown default:
-            "Tickr will check your current notification access when you continue."
+            "Tickr will check your notification access when you continue."
         }
     }
 }

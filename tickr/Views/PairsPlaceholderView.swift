@@ -41,7 +41,7 @@ struct PairsPlaceholderView: View {
             return "\(selectedPairForDashboard) Focus"
         }
 
-        return "My Pairs Dashboard"
+        return "Your Pairs"
     }
 
     private var dashboardSubtitle: String {
@@ -51,7 +51,7 @@ struct PairsPlaceholderView: View {
                 : "\(summary.events.count) events affecting \(selectedPairForDashboard) this week."
         }
 
-        return "You have \(highImpactEventsForSelectedPairs) high-impact event\(highImpactEventsForSelectedPairs == 1 ? "" : "s") affecting your pairs this week"
+        return "\(highImpactEventsForSelectedPairs) high-impact event\(highImpactEventsForSelectedPairs == 1 ? "" : "s") could affect your pairs this week."
     }
 
     var body: some View {
@@ -59,9 +59,9 @@ struct PairsPlaceholderView: View {
             TickrScreen {
                 VStack(alignment: .leading, spacing: TickrLayout.sectionSpacing) {
                     TickrSectionHeader(
-                        eyebrow: "Personalisation",
+                        eyebrow: "Your Watchlist",
                         title: "My Pairs",
-                        subtitle: "Choose your favourite forex pairs and follow only what matters to them."
+                        subtitle: "Choose the forex pairs you care about and focus on the events that move them."
                     )
 
                     selectionOverviewCard
@@ -140,11 +140,11 @@ struct PairsPlaceholderView: View {
 
     private var overviewText: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Build your forex watchlist")
+            Text("Build your watchlist")
                 .font(.system(size: 24, weight: .bold, design: .rounded))
                 .foregroundStyle(TickrPalette.text)
 
-            Text("Pick the forex pairs you trade most. Tickr will use them to prioritize the events you actually care about.")
+            Text("Select the forex pairs you trade or monitor most often. Tickr uses them to highlight the events most relevant to you.")
                 .font(.subheadline)
                 .foregroundStyle(TickrPalette.muted)
         }
@@ -153,7 +153,7 @@ struct PairsPlaceholderView: View {
     private var pairSelectionSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Pair Selection")
+                Text("Choose Pairs")
                     .font(.headline)
                     .foregroundStyle(TickrPalette.text)
 
@@ -227,7 +227,7 @@ struct PairsPlaceholderView: View {
 
             if selectedPairs.isEmpty {
                 TickrCard {
-                    Text("Select the pairs you trade to build your personalized calendar.")
+                    Text("Choose the pairs you trade to build a calendar tailored to you.")
                         .font(.subheadline)
                         .foregroundStyle(TickrPalette.muted)
                 }

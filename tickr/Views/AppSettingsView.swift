@@ -29,9 +29,9 @@ struct AppSettingsView: View {
             TickrScreen {
                 VStack(alignment: .leading, spacing: TickrLayout.sectionSpacing) {
                     TickrSectionHeader(
-                        eyebrow: "Preferences",
+                        eyebrow: "Your App",
                         title: "Settings",
-                        subtitle: "Notifications, display defaults, data controls, and account links."
+                        subtitle: "Manage alerts, display options, app data, and helpful links."
                     )
 
                     notificationPreferencesCard
@@ -75,11 +75,11 @@ struct AppSettingsView: View {
     private var notificationPreferencesCard: some View {
         TickrCard {
             VStack(alignment: .leading, spacing: 18) {
-                Text("Notification Preferences")
+                Text("Notifications")
                     .font(.headline)
                     .foregroundStyle(TickrPalette.text)
 
-                TickrInfoRow(label: "System access", value: notificationAuthorizationLabel)
+                TickrInfoRow(label: "Notification access", value: notificationAuthorizationLabel)
 
                 Button {
                     Task {
@@ -97,7 +97,7 @@ struct AppSettingsView: View {
                 leadTimePicker(title: "Medium impact", selection: $preferences.mediumImpactNotificationLeadTimeMinutes)
                 leadTimePicker(title: "Low impact", selection: $preferences.lowImpactNotificationLeadTimeMinutes)
 
-                TickrInfoRow(label: "Per-event override", value: "Available from the Event Detail screen")
+                TickrInfoRow(label: "Custom reminders", value: "Set a different reminder time from any event.")
 
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Sound")
@@ -114,7 +114,7 @@ struct AppSettingsView: View {
 
                 TickrToggleRow(
                     title: "Quiet hours",
-                    subtitle: "Suppress reminders during your off-session hours.",
+                    subtitle: "Pause reminders during the hours you do not want alerts.",
                     isOn: $preferences.quietHoursEnabled
                 )
 
@@ -138,12 +138,12 @@ struct AppSettingsView: View {
     private var displayPreferencesCard: some View {
         TickrCard {
             VStack(alignment: .leading, spacing: 18) {
-                Text("Display Preferences")
+                Text("Display")
                     .font(.headline)
                     .foregroundStyle(TickrPalette.text)
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Timezone display")
+                    Text("Time zone")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(TickrPalette.text)
 
@@ -154,21 +154,21 @@ struct AppSettingsView: View {
                             set: { preferences.manualTimeZoneIdentifier = $0 == "auto" ? nil : $0 }
                         )
                     ) {
-                        Text("Auto-detect").tag("auto")
+                        Text("Use device time zone").tag("auto")
                         ForEach(manualTimeZoneOptions, id: \.self) { identifier in
                             Text(timeZoneLabel(for: identifier)).tag(identifier)
                         }
                     }
                     .pickerStyle(.menu)
 
-                    Text("Current: \(timeZoneLabel(for: preferences.effectiveTimeZone.identifier))")
+                    Text("Showing times in \(timeZoneLabel(for: preferences.effectiveTimeZone.identifier))")
                         .font(.caption)
                         .foregroundStyle(TickrPalette.muted)
                 }
 
                 TickrToggleRow(
-                    title: "Use 24-hour time",
-                    subtitle: "Switch between compact and standard time formatting.",
+                    title: "24-hour time",
+                    subtitle: "Show event times in 24-hour format.",
                     isOn: $preferences.use24HourTime
                 )
 
@@ -204,7 +204,7 @@ struct AppSettingsView: View {
     private var dataCard: some View {
         TickrCard {
             VStack(alignment: .leading, spacing: 18) {
-                Text("Data & Cache")
+                Text("Calendar Data")
                     .font(.headline)
                     .foregroundStyle(TickrPalette.text)
 
@@ -212,10 +212,10 @@ struct AppSettingsView: View {
                     label: "Last updated",
                     value: viewModel.lastRefreshDate.map {
                         RelativeDateTimeFormatter().localizedString(for: $0, relativeTo: Date())
-                    } ?? "Not refreshed yet"
+                    } ?? "No refresh yet"
                 )
 
-                TickrInfoRow(label: "Source", value: "Tickr calendar feed")
+                TickrInfoRow(label: "Data source", value: "Tickr calendar feed")
 
                 Button {
                     Task {
@@ -229,7 +229,7 @@ struct AppSettingsView: View {
                 Button {
                     do {
                         try viewModel.clearCache()
-                        cacheMessage = "Calendar cache cleared."
+                        cacheMessage = "Saved calendar data was cleared."
                     } catch {
                         cacheMessage = error.localizedDescription
                     }
@@ -244,7 +244,7 @@ struct AppSettingsView: View {
     private var aboutCard: some View {
         TickrCard {
             VStack(alignment: .leading, spacing: 18) {
-                Text("About & Feedback")
+                Text("About")
                     .font(.headline)
                     .foregroundStyle(TickrPalette.text)
 
@@ -259,16 +259,8 @@ struct AppSettingsView: View {
                         openURL(URL(string: "https://apps.apple.com/app/id0000000000?action=write-review")!)
                     })
                 } else {
-                    TickrInfoRow(label: "Rate on App Store", value: "Available after 2 weeks of use")
+                    TickrInfoRow(label: "Rate on the App Store", value: "Available after 2 weeks of use")
                 }
-
-                settingsLinkButton(title: "X / Twitter", action: {
-                    openURL(URL(string: "https://x.com/tickrapp")!)
-                })
-
-                settingsLinkButton(title: "YouTube", action: {
-                    openURL(URL(string: "https://www.youtube.com/@tickrapp")!)
-                })
 
                 settingsLinkButton(title: "Privacy Policy", action: {
                     openURL(URL(string: AppExternalLinks.privacyPolicyURL)!)
@@ -429,17 +421,17 @@ struct AppSettingsView: View {
         case .denied:
             NotificationAuthorizationStore.openSystemSettings()
         case .authorized, .provisional, .ephemeral:
-            notificationMessage = "Notifications are already enabled for Tickr."
+            notificationMessage = "Notifications are already turned on."
         case .notDetermined:
             do {
                 let granted = try await NotificationAuthorizationStore.requestAuthorizationIfNeeded()
                 await refreshNotificationAuthorizationStatus()
-                notificationMessage = granted ? "Notifications enabled for Tickr." : "Notifications are disabled for Tickr."
+                notificationMessage = granted ? "Notifications are now turned on." : "Notifications remain turned off."
             } catch {
                 notificationMessage = error.localizedDescription
             }
         @unknown default:
-            notificationMessage = "Unable to determine notification status."
+            notificationMessage = "Tickr could not confirm your notification status."
         }
     }
 
@@ -450,15 +442,15 @@ struct AppSettingsView: View {
     private var notificationAuthorizationLabel: String {
         switch notificationAuthorizationStatus {
         case .authorized:
-            "Allowed"
+            "On"
         case .provisional:
-            "Allowed silently"
+            "On silently"
         case .ephemeral:
-            "Temporarily allowed"
+            "Temporarily on"
         case .denied:
-            "Blocked in system settings"
+            "Turned off in Settings"
         case .notDetermined:
-            "Not requested yet"
+            "Not set yet"
         @unknown default:
             "Unknown"
         }
@@ -467,9 +459,9 @@ struct AppSettingsView: View {
     private var notificationAuthorizationActionTitle: String {
         switch notificationAuthorizationStatus {
         case .denied:
-            "Open System Settings"
+            "Open Settings"
         case .authorized, .provisional, .ephemeral:
-            "Notifications Enabled"
+            "Notifications On"
         case .notDetermined:
             "Enable Notifications"
         @unknown default:
@@ -479,10 +471,10 @@ struct AppSettingsView: View {
 }
 
 private enum AppExternalLinks {
-    static let githubRepository = "https://github.com/alex-morrisonn/tickr"
-    static let privacyPolicyURL = githubRepository + "/blob/main/Legal/Privacy-Policy.md"
-    static let termsOfServiceURL = githubRepository + "/blob/main/Legal/Terms-of-Service.md"
-    static let supportURL = githubRepository + "/blob/main/Legal/Support.md"
+    static let githubPagesBaseURL = "https://alex-morrisonn.github.io/tickr"
+    static let privacyPolicyURL = githubPagesBaseURL + "/privacy.html"
+    static let termsOfServiceURL = githubPagesBaseURL + "/terms.html"
+    static let supportURL = githubPagesBaseURL + "/support.html"
 }
 
 #Preview {

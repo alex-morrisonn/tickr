@@ -10,7 +10,7 @@ Last updated: January 30, 2026
 
 ## Support Scope
 
-Support requests can include:
+You can contact Tickr for help with:
 
 - Notification setup or troubleshooting
 - Calendar refresh issues
@@ -20,16 +20,12 @@ Support requests can include:
 
 ## Response Expectations
 
-Tickr will aim to respond within a commercially reasonable time, but no specific response-time guarantee is made in this repository.
+Tickr aims to respond within a reasonable time, but specific response times are not guaranteed.
 
 ## Troubleshooting Basics
 
-- Confirm Tickr notifications are allowed in iOS Settings.
-- Confirm Focus modes or scheduled summaries are not suppressing alerts.
+- Make sure Tickr notifications are allowed in iOS Settings.
+- Check that Focus modes or scheduled summaries are not suppressing alerts.
 - Refresh the calendar feed from the app settings screen.
-- Clear cached data if the feed appears stale.
+- Clear cached data if the calendar looks out of date.
 - Update to the latest app version available to you.
-
-## App Store Connect Note
-
-For App Store submission, publish this content or an equivalent support page at a public HTTPS URL and use that URL in App Store Connect as the app’s support link.
