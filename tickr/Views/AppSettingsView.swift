@@ -31,7 +31,7 @@ struct AppSettingsView: View {
                     TickrSectionHeader(
                         eyebrow: "Your App",
                         title: "Settings",
-                        subtitle: "Manage alerts, display options, app data, and helpful links."
+                        subtitle: "Manage alerts, display options, app data, and support links."
                     )
 
                     notificationPreferencesCard
@@ -254,14 +254,6 @@ struct AppSettingsView: View {
                     openURL(URL(string: "mailto:feedback@tickr.app?subject=Tickr%20Feedback")!)
                 })
 
-                if preferences.shouldShowRateAction {
-                    settingsLinkButton(title: "Rate on App Store", action: {
-                        openURL(URL(string: "https://apps.apple.com/app/id0000000000?action=write-review")!)
-                    })
-                } else {
-                    TickrInfoRow(label: "Rate on the App Store", value: "Available after 2 weeks of use")
-                }
-
                 settingsLinkButton(title: "Privacy Policy", action: {
                     openURL(URL(string: AppExternalLinks.privacyPolicyURL)!)
                 })
@@ -467,6 +459,24 @@ struct AppSettingsView: View {
         @unknown default:
             "Check Notifications"
         }
+    }
+}
+
+#Preview("Settings") {
+    NavigationStack {
+        AppSettingsView(
+            viewModel: CalendarViewModel(service: MockCalendarService()),
+            preferences: UserPreferences()
+        )
+    }
+}
+
+#Preview("Settings iPad") {
+    NavigationStack {
+        AppSettingsView(
+            viewModel: CalendarViewModel(service: MockCalendarService()),
+            preferences: UserPreferences()
+        )
     }
 }
 

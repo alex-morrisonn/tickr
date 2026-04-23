@@ -127,7 +127,7 @@ enum AppTab: String, Hashable {
         case .calendar:
             "Calendar"
         case .pairs:
-            "Pairs"
+            "My Pairs"
         case .sessions:
             "Sessions"
         case .settings:

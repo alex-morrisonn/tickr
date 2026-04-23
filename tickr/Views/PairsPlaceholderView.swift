@@ -2,10 +2,12 @@ import SwiftUI
 
 @MainActor
 struct PairsPlaceholderView: View {
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
     let viewModel: CalendarViewModel
     @Bindable var preferences: UserPreferences
 
-    @State private var selectedPairForDashboard: String?
+    @State private var isShowingWatchlistEditor = false
 
     private let pairCategories = PairCatalogCategory.allCases
 
@@ -13,45 +15,61 @@ struct PairsPlaceholderView: View {
         preferences.watchedPairSymbols.sorted()
     }
 
-    private var selectedPairSummaries: [PairDashboardSummary] {
-        selectedPairs.map { symbol in
-            PairDashboardSummary(
-                symbol: symbol,
-                events: viewModel.events(forPair: symbol).sorted { $0.timestamp < $1.timestamp }
-            )
-        }
+    private var watchedPairSummaries: [PairDashboardSummary] {
+        selectedPairs
+            .map { symbol in
+                PairDashboardSummary(
+                    symbol: symbol,
+                    events: viewModel.events(forPair: symbol).sorted { $0.timestamp < $1.timestamp }
+                )
+            }
+            .sorted(by: PairDashboardSummary.priorityOrder)
+    }
+
+    private var upcomingCatalysts: [PairCatalyst] {
+        watchedPairSummaries
+            .flatMap { summary in
+                summary.upcomingEvents.map { event in
+                    PairCatalyst(symbol: summary.symbol, event: event)
+                }
+            }
+            .sorted { lhs, rhs in
+                if lhs.event.timestamp != rhs.event.timestamp {
+                    return lhs.event.timestamp < rhs.event.timestamp
+                }
+
+                return lhs.symbol < rhs.symbol
+            }
+    }
+
+    private var nextCatalyst: PairCatalyst? {
+        upcomingCatalysts.first
     }
 
     private var highImpactEventsForSelectedPairs: Int {
-        Set(selectedPairSummaries.flatMap { summary in
+        Set(watchedPairSummaries.flatMap { summary in
             summary.events.filter { $0.impactLevel == .high }.map(\.id)
         }).count
     }
 
-    private var dashboardPairs: [PairDashboardSummary] {
-        if let selectedPairForDashboard {
-            return selectedPairSummaries.filter { $0.symbol == selectedPairForDashboard }
-        }
-
-        return selectedPairSummaries
+    private var activePairCount: Int {
+        watchedPairSummaries.filter { !$0.events.isEmpty }.count
     }
 
-    private var dashboardTitle: String {
-        if let selectedPairForDashboard {
-            return "\(selectedPairForDashboard) Focus"
-        }
-
-        return "Your Pairs"
+    private var totalEventsForSelectedPairs: Int {
+        watchedPairSummaries.reduce(0) { $0 + $1.events.count }
     }
 
-    private var dashboardSubtitle: String {
-        if let selectedPairForDashboard, let summary = selectedPairSummaries.first(where: { $0.symbol == selectedPairForDashboard }) {
-            return summary.events.isEmpty
-                ? "No scheduled events affecting \(selectedPairForDashboard) this week."
-                : "\(summary.events.count) events affecting \(selectedPairForDashboard) this week."
+    private var bodySubtitle: String {
+        if selectedPairs.isEmpty {
+            return "Track the pairs you trade and see which catalysts matter most this week."
         }
 
-        return "\(highImpactEventsForSelectedPairs) high-impact event\(highImpactEventsForSelectedPairs == 1 ? "" : "s") could affect your pairs this week."
+        if nextCatalyst != nil {
+            return "See which scheduled events matter most for the pairs you trade."
+        }
+
+        return "Your watchlist is set. This week is quiet across the pairs you follow."
     }
 
     var body: some View {
@@ -59,21 +77,22 @@ struct PairsPlaceholderView: View {
             TickrScreen {
                 VStack(alignment: .leading, spacing: TickrLayout.sectionSpacing) {
                     TickrSectionHeader(
-                        eyebrow: "Your Watchlist",
+                        eyebrow: "Pair Impact",
                         title: "My Pairs",
-                        subtitle: "Choose the forex pairs you care about and focus on the events that move them."
+                        subtitle: bodySubtitle
                     )
 
-                    selectionOverviewCard
-                    pairSelectionSection
-                    dashboardSection
+                    weeklySummaryCard
+                    focusSection
+                    catalystsSection
+                    watchlistSection
                 }
             }
         }
         .background(Color.clear)
         .overlay {
             if viewModel.isLoading && viewModel.events.isEmpty {
-                ProgressView("Loading pairs...")
+                ProgressView("Loading pair impact...")
                     .padding(14)
                     .background(
                         RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -92,6 +111,13 @@ struct PairsPlaceholderView: View {
                     .font(.system(size: 20, weight: .bold, design: .rounded))
                     .foregroundStyle(TickrPalette.text)
             }
+
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(manageWatchlistButtonTitle) {
+                    isShowingWatchlistEditor = true
+                }
+                .tint(TickrPalette.accent)
+            }
         }
         .task {
             guard viewModel.events.isEmpty else { return }
@@ -101,99 +127,97 @@ struct PairsPlaceholderView: View {
             await viewModel.refresh()
             TickrHaptics.success()
         }
-        .animation(.easeInOut(duration: 0.18), value: selectedPairs)
-        .animation(.easeInOut(duration: 0.18), value: dashboardPairs.map(\.id))
-    }
-
-    private var selectionOverviewCard: some View {
-        TickrCard {
-            VStack(alignment: .leading, spacing: 16) {
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .top, spacing: 12) {
-                        overviewText
-                        Spacer()
-                        TickrPill(text: "\(selectedPairs.count) selected")
+        .sheet(isPresented: $isShowingWatchlistEditor) {
+            NavigationStack {
+                WatchlistEditorView(
+                    preferences: preferences,
+                    pairCategories: pairCategories,
+                    pairEvents: { symbol in
+                        viewModel.events(forPair: symbol)
                     }
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        overviewText
-                        TickrPill(text: "\(selectedPairs.count) selected")
-                    }
-                }
-
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: TickrLayout.compactItemSpacing) {
-                        TickrMetricCard(title: "Selected", value: "\(selectedPairs.count)")
-                        TickrMetricCard(title: "High impact", value: "\(highImpactEventsForSelectedPairs)")
-                        TickrMetricCard(title: "This week", value: "\(selectedPairSummaries.flatMap(\.events).count)")
-                    }
-
-                    VStack(spacing: TickrLayout.compactItemSpacing) {
-                        TickrMetricCard(title: "Selected", value: "\(selectedPairs.count)")
-                        TickrMetricCard(title: "High impact", value: "\(highImpactEventsForSelectedPairs)")
-                        TickrMetricCard(title: "This week", value: "\(selectedPairSummaries.flatMap(\.events).count)")
-                    }
-                }
+                )
             }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
+        .animation(.easeInOut(duration: 0.18), value: selectedPairs)
+        .animation(.easeInOut(duration: 0.18), value: watchedPairSummaries.map(\.id))
     }
 
-    private var overviewText: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Build your watchlist")
-                .font(.system(size: 24, weight: .bold, design: .rounded))
-                .foregroundStyle(TickrPalette.text)
-
-            Text("Select the forex pairs you trade or monitor most often. Tickr uses them to highlight the events most relevant to you.")
-                .font(.subheadline)
-                .foregroundStyle(TickrPalette.muted)
-        }
-    }
-
-    private var pairSelectionSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Choose Pairs")
-                    .font(.headline)
+    private var weeklySummaryCard: some View {
+        TickrCard {
+            VStack(alignment: .leading, spacing: 18) {
+                Text(summaryTitle)
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
                     .foregroundStyle(TickrPalette.text)
 
-                Spacer()
+                Text(summarySubtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(TickrPalette.muted)
 
-                if !selectedPairs.isEmpty {
-                    Button("Clear all") {
-                        preferences.watchedPairSymbols = []
-                        selectedPairForDashboard = nil
+                PairExposureOverviewBar(summaries: watchedPairSummaries)
+
+                if let nextCatalyst {
+                    HStack(alignment: .center, spacing: 10) {
+                        Image(systemName: "bolt.fill")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(TickrPalette.accent)
+
+                        Text("Next: \(nextCatalyst.symbol) • \(nextCatalyst.event.title) • \(nextCatalystValue)")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(TickrPalette.text)
+                            .lineLimit(2)
                     }
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(TickrPalette.accent)
+                } else {
+                    Text("Add a few pairs to turn the calendar into a personalized catalyst view.")
+                        .font(.caption)
+                        .foregroundStyle(TickrPalette.muted)
                 }
             }
+        }
+    }
 
-            ForEach(pairCategories) { category in
+    private var focusSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if watchedPairSummaries.isEmpty {
                 TickrCard {
-                    VStack(alignment: .leading, spacing: 14) {
-                        HStack {
-                            Text(category.title)
-                                .font(.title3.weight(.semibold))
-                                .foregroundStyle(TickrPalette.text)
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("No watched pairs yet")
+                            .font(.headline)
+                            .foregroundStyle(TickrPalette.text)
 
-                            Spacer()
+                        Text("Select the pairs you trade and Tickr will surface the events that matter most this week.")
+                            .font(.subheadline)
+                            .foregroundStyle(TickrPalette.muted)
 
-                            TickrPill(text: "\(category.pairs.count) pairs")
+                        Button("Build watchlist") {
+                            isShowingWatchlistEditor = true
                         }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(TickrPalette.accent)
+                        )
+                    }
+                }
+            } else {
+                TickrCard {
+                    VStack(spacing: 4) {
+                        ForEach(Array(watchedPairSummaries.enumerated()), id: \.element.id) { index, summary in
+                            NavigationLink {
+                                PairEventsView(summary: summary, preferences: preferences)
+                            } label: {
+                                PairExposureRow(summary: summary, preferences: preferences)
+                            }
+                            .buttonStyle(.plain)
 
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 10)], alignment: .leading, spacing: 10) {
-                            ForEach(category.pairs) { pair in
-                                Button {
-                                    togglePairSelection(pair.symbol)
-                                } label: {
-                                    PairSelectionChip(
-                                        pair: pair,
-                                        isSelected: preferences.isPairWatched(pair.symbol),
-                                        hasEvents: !viewModel.events(forPair: pair.symbol).isEmpty
-                                    )
-                                }
-                                .buttonStyle(.plain)
+                            if index < watchedPairSummaries.count - 1 {
+                                Divider()
+                                    .overlay(TickrPalette.stroke)
+                                    .padding(.leading, 66)
                             }
                         }
                     }
@@ -202,67 +226,468 @@ struct PairsPlaceholderView: View {
         }
     }
 
-    private var dashboardSection: some View {
+    private var catalystsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(dashboardTitle)
+            sectionHeader(
+                title: "Calendar Impact Ahead",
+                subtitle: selectedPairs.isEmpty
+                    ? "Your upcoming event feed will appear here once you start following pairs."
+                    : "Upcoming releases affecting your watchlist."
+            )
+
+            if upcomingCatalysts.isEmpty {
+                TickrCard {
+                    Text(selectedPairs.isEmpty
+                        ? "Start with a few pairs to see a timeline of upcoming catalysts."
+                        : "No scheduled releases are affecting your watched pairs right now.")
+                        .font(.subheadline)
+                        .foregroundStyle(TickrPalette.muted)
+                }
+            } else {
+                TickrCard {
+                    VStack(spacing: 0) {
+                        ForEach(Array(upcomingCatalysts.prefix(6).enumerated()), id: \.element.id) { index, catalyst in
+                            PairCatalystTimelineRow(
+                                catalyst: catalyst,
+                                preferences: preferences,
+                                showsConnector: index < min(upcomingCatalysts.count, 6) - 1
+                            )
+
+                            if index < min(upcomingCatalysts.count, 6) - 1 {
+                                Divider()
+                                    .overlay(TickrPalette.stroke)
+                                    .padding(.leading, 78)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var watchlistSection: some View {
+        TickrCard {
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Watchlist")
                         .font(.headline)
                         .foregroundStyle(TickrPalette.text)
-                    Text(dashboardSubtitle)
+
+                    Text(watchlistSummaryText)
                         .font(.subheadline)
                         .foregroundStyle(TickrPalette.muted)
                 }
 
                 Spacer()
 
-                if selectedPairForDashboard != nil {
-                    Button("Show all") {
-                        selectedPairForDashboard = nil
-                    }
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(TickrPalette.accent)
+                Button(selectedPairs.isEmpty ? "Add pairs" : "Manage") {
+                    isShowingWatchlistEditor = true
                 }
-            }
-
-            if selectedPairs.isEmpty {
-                TickrCard {
-                    Text("Choose the pairs you trade to build a calendar tailored to you.")
-                        .font(.subheadline)
-                        .foregroundStyle(TickrPalette.muted)
-                }
-            } else {
-                ForEach(dashboardPairs) { summary in
-                    NavigationLink {
-                        PairEventsView(summary: summary, preferences: preferences)
-                    } label: {
-                        PairDashboardCard(
-                            summary: summary,
-                            preferences: preferences,
-                            isFocused: selectedPairForDashboard == summary.symbol
-                        ) {
-                            selectedPairForDashboard = summary.symbol
-                        }
-                    }
-                    .buttonStyle(.plain)
-                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(TickrPalette.accent)
+                )
             }
         }
     }
 
-    private func togglePairSelection(_ symbol: String) {
-        if preferences.isPairWatched(symbol) {
-            preferences.toggleWatch(for: symbol)
-            TickrHaptics.selection()
-
-            if selectedPairForDashboard == symbol {
-                selectedPairForDashboard = nil
-            }
-            return
+    private var summaryTitle: String {
+        if selectedPairs.isEmpty {
+            return "Turn the calendar into a pair-focused trading view"
         }
 
-        preferences.toggleWatch(for: symbol)
-        TickrHaptics.selection()
+        if highImpactEventsForSelectedPairs > 0 {
+            return "\(highImpactEventsForSelectedPairs) high-impact catalysts are lined up for your pairs"
+        }
+
+        if activePairCount > 0 {
+            return "\(activePairCount) of your pairs have scheduled releases this week"
+        }
+
+        return "Your watched pairs are quiet this week"
+    }
+
+    private var summarySubtitle: String {
+        if selectedPairs.isEmpty {
+            return "Build a watchlist to see which events matter most to the instruments you trade."
+        }
+
+        if let nextCatalyst {
+            return "\(selectedPairs.count) pairs watched, \(highImpactEventsForSelectedPairs) high-impact catalysts this week. Next is \(nextCatalyst.symbol) \(RelativeDateTimeFormatter().localizedString(for: nextCatalyst.event.timestamp, relativeTo: Date()))."
+        }
+
+        if totalEventsForSelectedPairs == 0 {
+            return "No scheduled events in the current feed affect your watched pairs."
+        }
+
+        return "\(totalEventsForSelectedPairs) total events are mapped across your watchlist this week."
+    }
+
+    private var nextCatalystValue: String {
+        guard let nextCatalyst else {
+            return "None"
+        }
+
+        return RelativeDateTimeFormatter().localizedString(for: nextCatalyst.event.timestamp, relativeTo: Date())
+    }
+
+    private var watchlistSummaryText: String {
+        if selectedPairs.isEmpty {
+            return "No pairs selected yet."
+        }
+
+        return "\(selectedPairs.count) watched • feeds calendar filters, alerts, and this impact view."
+    }
+
+    private var manageWatchlistButtonTitle: String {
+        horizontalSizeClass == .regular ? "Manage Watchlists" : "Manage"
+    }
+
+    private func sectionHeader<Accessory: View>(
+        title: String,
+        subtitle: String,
+        @ViewBuilder accessory: () -> Accessory
+    ) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(TickrPalette.text)
+
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(TickrPalette.muted)
+            }
+
+            Spacer()
+
+            accessory()
+        }
+    }
+
+    private func sectionHeader(title: String, subtitle: String) -> some View {
+        sectionHeader(title: title, subtitle: subtitle) {
+            EmptyView()
+        }
+    }
+}
+
+private struct PairExposureRow: View {
+    let summary: PairDashboardSummary
+    let preferences: UserPreferences
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 14) {
+            Text(summary.symbol)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(TickrPalette.text)
+                .frame(width: 72, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    ImpactDotsRow(summary: summary)
+                    Text(summary.exposureLabelShort)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(summary.primaryImpactColor)
+                }
+
+                PairExposureBar(summary: summary)
+
+                if let event = summary.nextEvent {
+                    Text("\(event.title) • \(eventMetadata(for: event))")
+                        .font(.caption)
+                        .foregroundStyle(TickrPalette.muted)
+                        .lineLimit(1)
+                } else {
+                    Text("No upcoming catalysts scheduled.")
+                        .font(.caption)
+                        .foregroundStyle(TickrPalette.muted)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            VStack(alignment: .trailing, spacing: 6) {
+                Text(summary.nextEventRelativeLabel)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(TickrPalette.text)
+
+                if let event = summary.nextEvent {
+                    Text(EventDateFormatter.timeString(
+                        from: event.timestamp,
+                        useUTC: false,
+                        use24HourTime: preferences.use24HourTime
+                    ))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(TickrPalette.muted)
+                }
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(TickrPalette.muted)
+            }
+        }
+        .padding(.vertical, 12)
+    }
+
+    private func eventMetadata(for event: EconomicEvent) -> String {
+        let day = EventDateFormatter.dayString(from: event.timestamp, useUTC: false)
+        let category = EventPresentation.categoryLabel(for: event.category)
+        return "\(day) • \(category) • \(event.currencyCode)"
+    }
+}
+
+private struct PairExposureOverviewBar: View {
+    let summaries: [PairDashboardSummary]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                ForEach(summaries) { summary in
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(summary.primaryImpactColor.opacity(summary.events.isEmpty ? 0.18 : 0.82))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 10)
+                        .layoutPriority(summary.visualWeight)
+                }
+            }
+            .frame(maxWidth: .infinity)
+
+            if !summaries.isEmpty {
+                HStack(spacing: 10) {
+                    ForEach(summaries.prefix(4)) { summary in
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(summary.primaryImpactColor)
+                                .frame(width: 8, height: 8)
+
+                            Text(summary.symbol)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(TickrPalette.muted)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct PairExposureBar: View {
+    let summary: PairDashboardSummary
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule(style: .continuous)
+                    .fill(TickrPalette.surfaceStrong)
+
+                Capsule(style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [summary.primaryImpactColor.opacity(0.55), summary.primaryImpactColor],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(width: max(proxy.size.width * summary.normalizedIntensity, 8))
+            }
+        }
+        .frame(height: 8)
+    }
+}
+
+private struct ImpactDotsRow: View {
+    let summary: PairDashboardSummary
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(0..<3, id: \.self) { index in
+                Circle()
+                    .fill(color(for: index))
+                    .frame(width: 8, height: 8)
+            }
+        }
+    }
+
+    private func color(for index: Int) -> Color {
+        if index < summary.highImpactCount {
+            return ImpactLevel.high.color
+        }
+
+        if index < summary.highImpactCount + min(summary.mediumImpactCount, max(0, 3 - summary.highImpactCount)) {
+            return ImpactLevel.medium.color
+        }
+
+        if !summary.events.isEmpty {
+            return ImpactLevel.low.color.opacity(0.85)
+        }
+
+        return TickrPalette.stroke
+    }
+}
+
+private struct PairCatalystTimelineRow: View {
+    let catalyst: PairCatalyst
+    let preferences: UserPreferences
+    let showsConnector: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(EventDateFormatter.timeString(
+                    from: catalyst.event.timestamp,
+                    useUTC: false,
+                    use24HourTime: preferences.use24HourTime
+                ))
+                .font(.caption.monospacedDigit().weight(.semibold))
+                .foregroundStyle(TickrPalette.text)
+
+                Text(RelativeDateTimeFormatter().localizedString(for: catalyst.event.timestamp, relativeTo: Date()))
+                    .font(.caption2)
+                    .foregroundStyle(TickrPalette.muted)
+            }
+            .frame(width: 56, alignment: .trailing)
+
+            VStack(spacing: 0) {
+                Circle()
+                    .fill(catalyst.event.impactLevel.color)
+                    .frame(width: 12, height: 12)
+
+                if showsConnector {
+                    Rectangle()
+                        .fill(TickrPalette.stroke)
+                        .frame(width: 1, height: 44)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 8) {
+                    Text(catalyst.symbol)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(TickrPalette.text)
+
+                    Text(catalyst.event.impactLevel.label)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(catalyst.event.impactLevel.color)
+                }
+
+                Text(catalyst.event.title)
+                    .font(.subheadline)
+                    .foregroundStyle(TickrPalette.text)
+
+                Text("\(EventDateFormatter.dayString(from: catalyst.event.timestamp, useUTC: false)) • \(catalyst.event.currencyCode)")
+                    .font(.caption)
+                    .foregroundStyle(TickrPalette.muted)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 12)
+    }
+}
+
+private struct WatchlistEditorView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let preferences: UserPreferences
+    let pairCategories: [PairCatalogCategory]
+    let pairEvents: (String) -> [EconomicEvent]
+
+    private var selectedPairs: [String] {
+        preferences.watchedPairSymbols.sorted()
+    }
+
+    var body: some View {
+        ScrollView {
+            TickrScreen {
+                VStack(alignment: .leading, spacing: TickrLayout.sectionSpacing) {
+                    TickrSectionHeader(
+                        eyebrow: "Watchlist",
+                        title: "Manage Pairs",
+                        subtitle: "Choose the instruments that should shape your calendar, catalysts, and notifications."
+                    )
+
+                    TickrCard {
+                        VStack(alignment: .leading, spacing: 14) {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text("Current watchlist")
+                                    .font(.headline)
+                                    .foregroundStyle(TickrPalette.text)
+
+                                Spacer()
+
+                                if !selectedPairs.isEmpty {
+                                    Button("Clear all") {
+                                        preferences.watchedPairSymbols = []
+                                        TickrHaptics.selection()
+                                    }
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(TickrPalette.accent)
+                                }
+                            }
+
+                            if selectedPairs.isEmpty {
+                                Text("No pairs selected yet.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(TickrPalette.muted)
+                            } else {
+                                LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 10)], alignment: .leading, spacing: 10) {
+                                    ForEach(selectedPairs, id: \.self) { symbol in
+                                        TickrPill(text: symbol)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    ForEach(pairCategories) { category in
+                        TickrCard {
+                            VStack(alignment: .leading, spacing: 14) {
+                                HStack {
+                                    Text(category.title)
+                                        .font(.title3.weight(.semibold))
+                                        .foregroundStyle(TickrPalette.text)
+
+                                    Spacer()
+
+                                    TickrPill(text: "\(category.pairs.count) pairs")
+                                }
+
+                                LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 10)], alignment: .leading, spacing: 10) {
+                                    ForEach(category.pairs) { pair in
+                                        Button {
+                                            preferences.toggleWatch(for: pair.symbol)
+                                            TickrHaptics.selection()
+                                        } label: {
+                                            PairSelectionChip(
+                                                pair: pair,
+                                                isSelected: preferences.isPairWatched(pair.symbol),
+                                                hasEvents: !pairEvents(pair.symbol).isEmpty
+                                            )
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .background(Color.clear)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Done") {
+                    dismiss()
+                }
+                .tint(TickrPalette.accent)
+            }
+        }
     }
 }
 
@@ -309,109 +734,6 @@ struct PairSelectionChip: View {
     }
 }
 
-private struct PairDashboardCard: View {
-    let summary: PairDashboardSummary
-    let preferences: UserPreferences
-    let isFocused: Bool
-    let onFocus: () -> Void
-
-    var body: some View {
-        TickrCard {
-            VStack(alignment: .leading, spacing: 14) {
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .top, spacing: 12) {
-                        headerText
-                        Spacer()
-                        focusButton
-                    }
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        headerText
-                        focusButton
-                    }
-                }
-
-                if summary.events.isEmpty {
-                    Text("No scheduled events affecting this pair this week.")
-                        .font(.subheadline)
-                        .foregroundStyle(TickrPalette.muted)
-                } else {
-                    VStack(spacing: 10) {
-                        ForEach(summary.upcomingEvents.prefix(3)) { event in
-                            HStack(alignment: .top, spacing: 12) {
-                                Circle()
-                                    .fill(event.impactLevel.color)
-                                    .frame(width: 10, height: 10)
-                                    .padding(.top, 5)
-
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(event.title)
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(TickrPalette.text)
-
-                                    Text(eventMetadata(for: event, preferences: preferences))
-                                        .font(.caption)
-                                        .foregroundStyle(TickrPalette.muted)
-                                }
-
-                                Spacer(minLength: 8)
-
-                                Text(EventDateFormatter.timeString(
-                                    from: event.timestamp,
-                                    useUTC: false,
-                                    use24HourTime: preferences.use24HourTime
-                                ))
-                                .font(.caption.monospacedDigit().weight(.semibold))
-                                .foregroundStyle(TickrPalette.muted)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private var headerText: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Text(summary.symbol)
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(TickrPalette.text)
-
-                TickrPill(text: "\(summary.highImpactCount) high impact", tint: TickrPalette.accentSoft.opacity(0.45))
-            }
-
-            Text(summary.events.isEmpty ? "No events this week" : "\(summary.events.count) scheduled events this week")
-                .font(.subheadline)
-                .foregroundStyle(TickrPalette.muted)
-        }
-    }
-
-    private var focusButton: some View {
-        Button(isFocused ? "Focused" : "Show only this pair") {
-            onFocus()
-        }
-        .font(.caption.weight(.semibold))
-        .foregroundStyle(isFocused ? Color.white : TickrPalette.text)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(
-            Capsule(style: .continuous)
-                .fill(isFocused ? TickrPalette.accent : TickrPalette.surfaceStrong)
-                .overlay {
-                    Capsule(style: .continuous)
-                        .stroke(TickrPalette.stroke, lineWidth: isFocused ? 0 : 1)
-                }
-        )
-    }
-
-    private func eventMetadata(for event: EconomicEvent, preferences: UserPreferences) -> String {
-        let day = EventDateFormatter.dayString(from: event.timestamp, useUTC: false)
-        let category = EventPresentation.categoryLabel(for: event.category)
-        return "\(day) • \(category) • \(event.currencyCode)"
-    }
-}
-
 private struct PairEventsView: View {
     let summary: PairDashboardSummary
     let preferences: UserPreferences
@@ -421,7 +743,7 @@ private struct PairEventsView: View {
             TickrScreen {
                 VStack(alignment: .leading, spacing: TickrLayout.sectionSpacing) {
                     TickrSectionHeader(
-                        eyebrow: "Pair Focus",
+                        eyebrow: "Impact Detail",
                         title: summary.symbol,
                         subtitle: "\(summary.highImpactCount) high-impact event\(summary.highImpactCount == 1 ? "" : "s") this week"
                     )
@@ -542,6 +864,15 @@ private struct PairEventValuePill: View {
     }
 }
 
+private struct PairCatalyst: Identifiable {
+    let symbol: String
+    let event: EconomicEvent
+
+    var id: String {
+        "\(symbol)-\(event.id)"
+    }
+}
+
 private struct PairDashboardSummary: Identifiable {
     let symbol: String
     let events: [EconomicEvent]
@@ -552,8 +883,137 @@ private struct PairDashboardSummary: Identifiable {
         events.filter { $0.impactLevel == .high }.count
     }
 
+    var mediumImpactCount: Int {
+        events.filter { $0.impactLevel == .medium }.count
+    }
+
     var upcomingEvents: [EconomicEvent] {
         events.filter { $0.timestamp >= Date() }
+    }
+
+    var nextEvent: EconomicEvent? {
+        upcomingEvents.min { $0.timestamp < $1.timestamp }
+    }
+
+    var exposureLabel: String {
+        if highImpactCount >= 2 {
+            return "High Exposure"
+        }
+
+        if highImpactCount == 1 || mediumImpactCount >= 2 {
+            return "Active Week"
+        }
+
+        if !events.isEmpty {
+            return "On Watch"
+        }
+
+        return "Quiet"
+    }
+
+    var exposureLabelShort: String {
+        if highImpactCount >= 2 {
+            return "High"
+        }
+
+        if highImpactCount == 1 || mediumImpactCount >= 2 {
+            return "Active"
+        }
+
+        if !events.isEmpty {
+            return "Watch"
+        }
+
+        return "Quiet"
+    }
+
+    var primaryImpactColor: Color {
+        if highImpactCount > 0 {
+            return ImpactLevel.high.color
+        }
+
+        if mediumImpactCount > 0 {
+            return ImpactLevel.medium.color
+        }
+
+        if !events.isEmpty {
+            return TickrPalette.accent
+        }
+
+        return TickrPalette.muted
+    }
+
+    var exposureTint: Color {
+        if highImpactCount >= 2 {
+            return Color.red.opacity(0.18)
+        }
+
+        if highImpactCount == 1 || mediumImpactCount >= 2 {
+            return Color.orange.opacity(0.18)
+        }
+
+        if !events.isEmpty {
+            return TickrPalette.accentSoft.opacity(0.35)
+        }
+
+        return TickrPalette.surfaceStrong
+    }
+
+    var exposureDescription: String {
+        if let nextEvent {
+            return "Next catalyst \(RelativeDateTimeFormatter().localizedString(for: nextEvent.timestamp, relativeTo: Date()))."
+        }
+
+        if events.isEmpty {
+            return "No mapped events for this pair in the current calendar feed."
+        }
+
+        return "\(events.count) events mapped to this pair this week."
+    }
+
+    var statusHeadline: String {
+        if let nextEvent {
+            return EventDateFormatter.dayString(from: nextEvent.timestamp, useUTC: false)
+        }
+
+        return "No catalyst"
+    }
+
+    var nextEventRelativeLabel: String {
+        guard let nextEvent else {
+            return "None"
+        }
+
+        return RelativeDateTimeFormatter().localizedString(for: nextEvent.timestamp, relativeTo: Date())
+    }
+
+    var normalizedIntensity: CGFloat {
+        let weightedScore = Double(highImpactCount * 3) + Double(mediumImpactCount * 2) + Double(max(events.count - highImpactCount - mediumImpactCount, 0))
+        let normalized = min(max(weightedScore / 9.0, 0.12), 1.0)
+        return CGFloat(events.isEmpty ? 0.08 : normalized)
+    }
+
+    var visualWeight: Double {
+        Double(normalizedIntensity)
+    }
+
+    static func priorityOrder(lhs: PairDashboardSummary, rhs: PairDashboardSummary) -> Bool {
+        let lhsNextTime = lhs.nextEvent?.timestamp ?? .distantFuture
+        let rhsNextTime = rhs.nextEvent?.timestamp ?? .distantFuture
+
+        if lhs.highImpactCount != rhs.highImpactCount {
+            return lhs.highImpactCount > rhs.highImpactCount
+        }
+
+        if lhsNextTime != rhsNextTime {
+            return lhsNextTime < rhsNextTime
+        }
+
+        if lhs.events.count != rhs.events.count {
+            return lhs.events.count > rhs.events.count
+        }
+
+        return lhs.symbol < rhs.symbol
     }
 }
 
@@ -600,28 +1060,44 @@ enum PairCatalogCategory: String, CaseIterable, Identifiable {
                 .init(symbol: "EURJPY", description: "Euro / Yen"),
                 .init(symbol: "GBPJPY", description: "Pound / Yen"),
                 .init(symbol: "AUDJPY", description: "Aussie / Yen"),
+                .init(symbol: "CHFJPY", description: "Swissy / Yen"),
                 .init(symbol: "EURAUD", description: "Euro / Aussie"),
-                .init(symbol: "EURCHF", description: "Euro / Swissy"),
-                .init(symbol: "CADJPY", description: "Loonie / Yen")
+                .init(symbol: "GBPAUD", description: "Pound / Aussie")
             ]
         case .exotics:
             [
-                .init(symbol: "USDSEK", description: "Dollar / Krona"),
-                .init(symbol: "USDNOK", description: "Dollar / Krone"),
-                .init(symbol: "USDMXN", description: "Dollar / Peso"),
-                .init(symbol: "USDZAR", description: "Dollar / Rand"),
                 .init(symbol: "USDTRY", description: "Dollar / Lira"),
-                .init(symbol: "EURTRY", description: "Euro / Lira")
+                .init(symbol: "USDZAR", description: "Dollar / Rand"),
+                .init(symbol: "USDMXN", description: "Dollar / Peso"),
+                .init(symbol: "EURTRY", description: "Euro / Lira"),
+                .init(symbol: "GBPZAR", description: "Pound / Rand"),
+                .init(symbol: "AUDMXN", description: "Aussie / Peso")
             ]
         }
     }
 }
 
-#Preview {
-    NavigationStack {
+#Preview("My Pairs") {
+    let preferences = UserPreferences()
+    preferences.watchedPairSymbols = ["EURUSD", "GBPUSD", "USDJPY"]
+
+    return NavigationStack {
         PairsPlaceholderView(
             viewModel: CalendarViewModel(service: MockCalendarService()),
-            preferences: UserPreferences()
+            preferences: preferences
         )
     }
+}
+
+#Preview("My Pairs iPad") {
+    let preferences = UserPreferences()
+    preferences.watchedPairSymbols = ["EURUSD", "GBPUSD", "USDJPY"]
+
+    return NavigationStack {
+        PairsPlaceholderView(
+            viewModel: CalendarViewModel(service: MockCalendarService()),
+            preferences: preferences
+        )
+    }
+    .frame(width: 834, height: 1194)
 }

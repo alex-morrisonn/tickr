@@ -63,7 +63,7 @@ enum TickrLayout {
     static let bottomPadding: CGFloat = 108
     static let maxContentWidth: CGFloat = 760
     static let compactItemSpacing: CGFloat = 8
-    static let sectionSpacing: CGFloat = 12
+    static let sectionSpacing: CGFloat = 14
 }
 
 struct TickrBackground: View {
@@ -74,6 +74,8 @@ struct TickrBackground: View {
 }
 
 struct TickrScreen<Content: View>: View {
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
     let content: Content
 
     init(@ViewBuilder content: () -> Content) {
@@ -81,12 +83,14 @@ struct TickrScreen<Content: View>: View {
     }
 
     var body: some View {
+        let isRegularWidth = horizontalSizeClass == .regular
+
         content
-            .frame(maxWidth: TickrLayout.maxContentWidth, alignment: .leading)
+            .frame(maxWidth: isRegularWidth ? 820 : TickrLayout.maxContentWidth, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.horizontal, TickrLayout.horizontalPadding)
-            .padding(.top, TickrLayout.topPadding)
-            .padding(.bottom, TickrLayout.bottomPadding)
+            .padding(.horizontal, isRegularWidth ? 24 : TickrLayout.horizontalPadding)
+            .padding(.top, isRegularWidth ? 16 : TickrLayout.topPadding)
+            .padding(.bottom, isRegularWidth ? 120 : TickrLayout.bottomPadding)
     }
 }
 
@@ -99,7 +103,7 @@ struct TickrCard<Content: View>: View {
 
     var body: some View {
         content
-            .padding(14)
+            .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)

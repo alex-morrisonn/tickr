@@ -91,7 +91,7 @@ struct OnboardingView: View {
                 .font(.system(size: 30, weight: .bold, design: .rounded))
                 .foregroundStyle(TickrPalette.text)
 
-            Text("Stay ahead of market-moving events with a calendar built for forex, futures, and active traders.")
+            Text("Stay ahead of market-moving events with a calendar built for active traders.")
                 .font(.headline)
                 .foregroundStyle(TickrPalette.muted)
 
@@ -110,7 +110,7 @@ struct OnboardingView: View {
                 .font(.system(size: 28, weight: .bold, design: .rounded))
                 .foregroundStyle(TickrPalette.text)
 
-            Text("Choose the pairs you want Tickr to prioritize. You can update this anytime.")
+            Text("Choose the pairs you want Tickr to prioritize. You can change this anytime.")
                 .font(.subheadline)
                 .foregroundStyle(TickrPalette.muted)
 
@@ -159,7 +159,7 @@ struct OnboardingView: View {
                 .font(.system(size: 30, weight: .bold, design: .rounded))
                 .foregroundStyle(TickrPalette.text)
 
-            Text("Turn on alerts to get a heads-up before high-impact events. A 30-minute reminder works well for most traders.")
+            Text("Turn on alerts to get a heads-up before high-impact events.")
                 .font(.headline)
                 .foregroundStyle(TickrPalette.muted)
 

@@ -18,7 +18,7 @@ struct SessionsKillzonesView: View {
                     TickrSectionHeader(
                         eyebrow: "Market Time",
                         title: "Sessions",
-                        subtitle: "Track the major forex sessions, their overlaps, and get notified before they begin."
+                        subtitle: "See the major trading centers in your time zone and what is live right now."
                     )
 
                     TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -26,10 +26,7 @@ struct SessionsKillzonesView: View {
                         let overlapStates = overlapDefinitions.map { OverlapState(definition: $0, now: context.date) }
 
                         VStack(alignment: .leading, spacing: TickrLayout.sectionSpacing) {
-                            overviewCard(sessionStates: sessionStates, overlapStates: overlapStates, now: context.date)
-                            timelineCard(sessionStates: sessionStates)
-                            sessionsCard(sessionStates: sessionStates)
-                            overlapsCard(overlapStates: overlapStates)
+                            marketBoardCard(now: context.date)
                             notificationsCard(sessionStates: sessionStates, overlapStates: overlapStates)
                         }
                     }
@@ -52,162 +49,15 @@ struct SessionsKillzonesView: View {
         }
     }
 
-    private func overviewCard(sessionStates: [SessionState], overlapStates: [OverlapState], now: Date) -> some View {
+    private func marketBoardCard(now: Date) -> some View {
         TickrCard {
-            VStack(alignment: .leading, spacing: 16) {
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .top, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(headline(sessionStates: sessionStates, overlapStates: overlapStates))
-                                .font(.system(size: 24, weight: .bold, design: .rounded))
-                                .foregroundStyle(TickrPalette.text)
+            VStack(alignment: .leading, spacing: 18) {
+                boardHeaderText
 
-                            Text(subheadline(sessionStates: sessionStates, overlapStates: overlapStates, now: now))
-                                .font(.subheadline)
-                                .foregroundStyle(TickrPalette.muted)
-                        }
-
-                        Spacer()
-
-                        TickrPill(text: localTimeZoneLabel)
-                    }
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(headline(sessionStates: sessionStates, overlapStates: overlapStates))
-                                .font(.system(size: 24, weight: .bold, design: .rounded))
-                                .foregroundStyle(TickrPalette.text)
-
-                            Text(subheadline(sessionStates: sessionStates, overlapStates: overlapStates, now: now))
-                                .font(.subheadline)
-                                .foregroundStyle(TickrPalette.muted)
-                        }
-
-                        TickrPill(text: localTimeZoneLabel)
-                    }
-                }
-
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: TickrLayout.compactItemSpacing) {
-                        TickrMetricCard(title: "Open now", value: "\(sessionStates.filter(\.isActive).count)")
-                        TickrMetricCard(title: "Overlap", value: activeOverlapName(overlapStates: overlapStates))
-                        TickrMetricCard(title: "Next start", value: nextStartCountdown(sessionStates: sessionStates, overlapStates: overlapStates, now: now))
-                    }
-
-                    VStack(spacing: TickrLayout.compactItemSpacing) {
-                        TickrMetricCard(title: "Open now", value: "\(sessionStates.filter(\.isActive).count)")
-                        TickrMetricCard(title: "Overlap", value: activeOverlapName(overlapStates: overlapStates))
-                        TickrMetricCard(title: "Next start", value: nextStartCountdown(sessionStates: sessionStates, overlapStates: overlapStates, now: now))
-                    }
-                }
+                MarketBoardPanel(now: now, events: viewModel.events)
             }
         }
-    }
-
-    private func timelineCard(sessionStates: [SessionState]) -> some View {
-        TickrCard {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Session Clock")
-                    .font(.headline)
-                    .foregroundStyle(TickrPalette.text)
-
-                SessionTimelineView(sessionStates: sessionStates)
-                    .frame(height: 168)
-            }
-        }
-    }
-
-    private func sessionsCard(sessionStates: [SessionState]) -> some View {
-        TickrCard {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Sessions")
-                    .font(.headline)
-                    .foregroundStyle(TickrPalette.text)
-
-                ForEach(sessionStates) { state in
-                    HStack(alignment: .top, spacing: 12) {
-                        RoundedRectangle(cornerRadius: 999, style: .continuous)
-                            .fill(state.definition.color)
-                            .frame(width: 8, height: 44)
-                            .opacity(state.isActive ? 1 : 0.35)
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack(spacing: 8) {
-                                Text(state.definition.title)
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(TickrPalette.text)
-
-                                if state.isActive {
-                                    Text("Live")
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(state.definition.color)
-                                }
-                            }
-
-                            Text(state.localWindowLabel)
-                                .font(.caption)
-                                .foregroundStyle(TickrPalette.muted)
-                        }
-
-                        Spacer()
-
-                        Text(state.isActive ? "Closes in \(state.closeRelativeLabel)" : "Opens in \(state.openRelativeLabel)")
-                            .font(.caption.weight(.semibold))
-                            .monospacedDigit()
-                            .foregroundStyle(TickrPalette.muted)
-                    }
-                }
-            }
-        }
-    }
-
-    private func overlapsCard(overlapStates: [OverlapState]) -> some View {
-        TickrCard {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Overlaps")
-                    .font(.headline)
-                    .foregroundStyle(TickrPalette.text)
-
-                ForEach(overlapStates) { overlap in
-                    HStack(alignment: .top, spacing: 12) {
-                        Circle()
-                            .fill(overlap.definition.color)
-                            .frame(width: 10, height: 10)
-                            .padding(.top, 5)
-                            .opacity(overlap.isActive ? 1 : 0.45)
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack(spacing: 8) {
-                                Text(overlap.definition.title)
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(TickrPalette.text)
-
-                                if overlap.isActive {
-                                    Text("Live")
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(overlap.definition.color)
-                                }
-                            }
-
-                            Text(overlap.localWindowLabel)
-                                .font(.caption)
-                                .foregroundStyle(TickrPalette.muted)
-
-                            Text(overlap.definition.note)
-                                .font(.caption)
-                                .foregroundStyle(TickrPalette.muted)
-                        }
-
-                        Spacer()
-
-                        Text(overlap.isActive ? "Ends in \(overlap.endRelativeLabel)" : "Starts in \(overlap.startRelativeLabel)")
-                            .font(.caption.weight(.semibold))
-                            .monospacedDigit()
-                            .foregroundStyle(TickrPalette.muted)
-                    }
-                }
-            }
-        }
+        .padding(.top, 8)
     }
 
     private func notificationsCard(sessionStates: [SessionState], overlapStates: [OverlapState]) -> some View {
@@ -257,76 +107,13 @@ struct SessionsKillzonesView: View {
         }
     }
 
-    private func headline(sessionStates: [SessionState], overlapStates: [OverlapState]) -> String {
-        if !SessionPresentation.isForexMarketOpen(at: Date()) {
-            return "Forex market is closed"
+    private var boardHeaderText: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Market Board")
+                .font(.system(size: 24, weight: .bold, design: .rounded))
+                .foregroundStyle(TickrPalette.text)
         }
-
-        if let activeOverlap = overlapStates.first(where: \.isActive) {
-            return "\(activeOverlap.definition.shortTitle) overlap is live"
-        }
-
-        if let activeSession = sessionStates.first(where: \.isActive) {
-            return "\(activeSession.definition.shortTitle) session is live"
-        }
-
-        return "No major session is open"
-    }
-
-    private func subheadline(sessionStates: [SessionState], overlapStates: [OverlapState], now: Date) -> String {
-        if !SessionPresentation.isForexMarketOpen(at: now) {
-            return "Reopens in \(SessionPresentation.relativeCountdown(to: SessionPresentation.nextForexMarketOpen(after: now), from: now))"
-        }
-
-        if let activeOverlap = overlapStates.first(where: \.isActive) {
-            return "Ends in \(SessionPresentation.relativeCountdown(to: activeOverlap.activeInterval.end, from: now))"
-        }
-
-        if let activeSession = sessionStates.first(where: \.isActive) {
-            return "Closes in \(SessionPresentation.relativeCountdown(to: activeSession.activeInterval.end, from: now))"
-        }
-
-        if let next = nextStartItem(sessionStates: sessionStates, overlapStates: overlapStates) {
-            return "\(next.name) starts in \(SessionPresentation.relativeCountdown(to: next.start, from: now))"
-        }
-
-        return "Tracking sessions in your local timezone."
-    }
-
-    private func activeOverlapName(overlapStates: [OverlapState]) -> String {
-        if !SessionPresentation.isForexMarketOpen(at: Date()) {
-            return "Closed"
-        }
-
-        return overlapStates.first(where: \.isActive)?.definition.shortTitle ?? "None"
-    }
-
-    private func nextStartCountdown(sessionStates: [SessionState], overlapStates: [OverlapState], now: Date) -> String {
-        guard let next = nextStartItem(sessionStates: sessionStates, overlapStates: overlapStates) else {
-            return "—"
-        }
-
-        return SessionPresentation.relativeCountdown(to: next.start, from: now)
-    }
-
-    private func nextStartItem(sessionStates: [SessionState], overlapStates: [OverlapState]) -> (name: String, start: Date)? {
-        let sessionItem = sessionStates.map { (name: $0.definition.shortTitle, start: $0.nextOpenDate) }.min { $0.start < $1.start }
-        let overlapItem = overlapStates.map { (name: $0.definition.shortTitle, start: $0.nextStartDate) }.min { $0.start < $1.start }
-
-        switch (sessionItem, overlapItem) {
-        case let (session?, overlap?):
-            return session.start <= overlap.start ? session : overlap
-        case let (session?, nil):
-            return session
-        case let (nil, overlap?):
-            return overlap
-        case (nil, nil):
-            return nil
-        }
-    }
-
-    private var localTimeZoneLabel: String {
-        TimeZone.current.localizedName(for: .shortStandard, locale: .current) ?? TimeZone.current.identifier
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func sessionNotificationBinding(for definition: ForexSessionDefinition) -> Binding<Bool> {
@@ -451,57 +238,738 @@ struct SessionsKillzonesView: View {
     }
 }
 
-private struct SessionTimelineView: View {
-    let sessionStates: [SessionState]
+#Preview("Sessions") {
+    NavigationStack {
+        SessionsKillzonesView(
+            viewModel: CalendarViewModel(service: MockCalendarService()),
+            preferences: UserPreferences()
+        )
+    }
+}
+
+#Preview("Sessions iPad", traits: .fixedLayout(width: 834, height: 1194)) {
+    NavigationStack {
+        SessionsKillzonesView(
+            viewModel: CalendarViewModel(service: MockCalendarService()),
+            preferences: UserPreferences()
+        )
+    }
+}
+
+private struct MarketBoardPanel: View {
+    let now: Date
+    let events: [EconomicEvent]
+
+    @State private var markerDayFractionOverride: Double?
+    @State private var markerDragStartFraction: Double?
+
+    private let rows = MarketBoardDefinition.allCases
+    private let activityService: any MarketActivityService = EstimatedMarketActivityService()
+
+    var body: some View {
+        let displayedDate = markerDayFractionOverride.map { SessionPresentation.date(for: $0, onSameDayAs: now) } ?? now
+        let activitySnapshot = activityService.snapshot(at: displayedDate, events: events)
+
+        VStack(alignment: .leading, spacing: 14) {
+            GeometryReader { proxy in
+                let isCompact = proxy.size.width < 380
+                let labelWidth: CGFloat = isCompact ? 92 : 106
+                let spacing: CGFloat = isCompact ? 8 : 10
+                let rowHeight: CGFloat = isCompact ? 70 : 74
+                let volumeRowHeight: CGFloat = isCompact ? 110 : 118
+                let timelineWidth = max(proxy.size.width - labelWidth - spacing, 1)
+                let compactTimelineWidth = max(proxy.size.width - 32, 1)
+                let timelineRowCount = CGFloat(rows.count)
+                let markerHeight = isCompact
+                    ? proxy.size.height - rowHeight
+                    : (rowHeight * timelineRowCount) + (8 * max(timelineRowCount - 1, 0)) + 8 + volumeRowHeight
+                let markerFraction = markerDayFractionOverride ?? SessionPresentation.dayFraction(for: now)
+                let markerXPosition = (isCompact ? compactTimelineWidth : timelineWidth) * markerFraction
+
+                ZStack(alignment: .topLeading) {
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .fill(TickrPalette.surfaceStrong)
+
+                    Group {
+                        if isCompact {
+                            ZStack(alignment: .topLeading) {
+                                VStack(spacing: 8) {
+                                    ForEach(rows) { definition in
+                                        CompactMarketTimelineRow(
+                                            state: MarketBoardState(definition: definition, now: displayedDate),
+                                            timelineWidth: compactTimelineWidth
+                                        )
+                                        .frame(height: rowHeight)
+                                    }
+
+                                    CompactVolumeTimelineRow(
+                                        snapshot: activitySnapshot,
+                                        markerDate: displayedDate,
+                                        timelineWidth: compactTimelineWidth
+                                    )
+                                    .frame(height: volumeRowHeight)
+                                }
+
+                                SessionNowMarker(
+                                    xPosition: markerXPosition,
+                                    timelineWidth: compactTimelineWidth,
+                                    height: markerHeight,
+                                    timeLabel: markerTimeLabel,
+                                    isInteracting: markerDayFractionOverride != nil
+                                )
+                                .gesture(markerDragGesture(timelineWidth: compactTimelineWidth))
+                            }
+                        } else {
+                            HStack(alignment: .top, spacing: spacing) {
+                                VStack(spacing: 8) {
+                                    ForEach(rows) { definition in
+                                        MarketSessionSidebarCard(
+                                            state: MarketBoardState(definition: definition, now: displayedDate),
+                                            compact: false
+                                        )
+                                        .frame(height: rowHeight)
+                                    }
+
+                                    VolumeSidebarCard(
+                                        title: "Volume",
+                                        statusText: activitySnapshot.statusText,
+                                        tag: activitySnapshot.tier.rawValue,
+                                        tagColor: activityColor(for: activitySnapshot.tier)
+                                    )
+                                    .frame(height: volumeRowHeight)
+                                }
+                                .frame(width: labelWidth)
+
+                                ZStack(alignment: .topLeading) {
+                                    VStack(spacing: 8) {
+                                        ForEach(rows) { definition in
+                                            MarketSessionTimelineRow(
+                                                state: MarketBoardState(definition: definition, now: displayedDate),
+                                                timelineWidth: timelineWidth,
+                                                compact: false
+                                            )
+                                            .frame(height: rowHeight)
+                                        }
+
+                                        VolumeTimelineRow(
+                                            snapshot: activitySnapshot,
+                                            markerDate: displayedDate
+                                        )
+                                            .frame(height: volumeRowHeight)
+                                    }
+
+                                    SessionNowMarker(
+                                        xPosition: markerXPosition,
+                                        timelineWidth: timelineWidth,
+                                        height: markerHeight,
+                                        timeLabel: markerTimeLabel,
+                                        isInteracting: markerDayFractionOverride != nil
+                                    )
+                                    .gesture(markerDragGesture(timelineWidth: timelineWidth))
+                                }
+                                .frame(width: timelineWidth)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                }
+            }
+            .frame(height: 458)
+        }
+    }
+
+    private var markerTimeLabel: String {
+        let displayedDate = markerDayFractionOverride.map { SessionPresentation.date(for: $0, onSameDayAs: now) } ?? now
+        return SessionPresentation.markerTimeString(for: displayedDate)
+    }
+
+    private func markerDragGesture(timelineWidth: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                let clampedTimelineWidth = max(timelineWidth, 1)
+                let startFraction = markerDragStartFraction
+                    ?? markerDayFractionOverride
+                    ?? SessionPresentation.dayFraction(for: now)
+
+                if markerDragStartFraction == nil {
+                    markerDragStartFraction = startFraction
+                }
+
+                let translatedFraction = startFraction + (value.translation.width / clampedTimelineWidth)
+                let fraction = snappedMarkerFraction(for: translatedFraction, timelineWidth: clampedTimelineWidth)
+                markerDayFractionOverride = fraction
+            }
+            .onEnded { _ in
+                markerDragStartFraction = nil
+                markerDayFractionOverride = nil
+            }
+    }
+
+    private func snappedMarkerFraction(for fraction: Double, timelineWidth: CGFloat) -> Double {
+        let clampedFraction = min(max(fraction, 0), 1)
+        let snapThreshold = 4 / timelineWidth
+        let snapFractions = SessionPresentation.marketBoundaryFractions(onSameDayAs: now)
+
+        guard let nearestBoundary = snapFractions.min(by: {
+            abs($0 - clampedFraction) < abs($1 - clampedFraction)
+        }) else {
+            return clampedFraction
+        }
+
+        return abs(nearestBoundary - clampedFraction) <= snapThreshold ? nearestBoundary : clampedFraction
+    }
+    private func activityColor(for tier: MarketActivityTier) -> Color {
+        switch tier {
+        case .high:
+            TickrPalette.success
+        case .medium:
+            TickrPalette.warning
+        case .low:
+            Color(red: 0.80, green: 0.26, blue: 0.47)
+        }
+    }
+}
+
+enum MarketBoardDefinition: CaseIterable, Identifiable {
+    case sydney
+    case tokyo
+    case london
+    case newYork
+
+    var id: String { cityName }
+
+    var cityName: String {
+        switch self {
+        case .sydney:
+            "Sydney"
+        case .tokyo:
+            "Tokyo"
+        case .london:
+            "London"
+        case .newYork:
+            "New York"
+        }
+    }
+
+    var flag: String {
+        switch self {
+        case .sydney:
+            "🇦🇺"
+        case .tokyo:
+            "🇯🇵"
+        case .london:
+            "🇬🇧"
+        case .newYork:
+            "🇺🇸"
+        }
+    }
+
+    var timeZone: TimeZone {
+        switch self {
+        case .sydney:
+            TimeZone(identifier: "Australia/Sydney") ?? .current
+        case .tokyo:
+            TimeZone(identifier: "Asia/Tokyo") ?? .current
+        case .london:
+            TimeZone(identifier: "Europe/London") ?? .current
+        case .newYork:
+            TimeZone(identifier: "America/New_York") ?? .current
+        }
+    }
+
+    var openHour: Int {
+        switch self {
+        case .sydney:
+            7
+        case .tokyo:
+            9
+        case .london:
+            8
+        case .newYork:
+            8
+        }
+    }
+
+    var closeHour: Int {
+        switch self {
+        case .sydney:
+            16
+        case .tokyo:
+            18
+        case .london:
+            17
+        case .newYork:
+            17
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .sydney:
+            Color(red: 0.26, green: 0.39, blue: 0.83)
+        case .tokyo:
+            Color(red: 0.64, green: 0.13, blue: 0.57)
+        case .london:
+            Color(red: 0.27, green: 0.54, blue: 0.89)
+        case .newYork:
+            Color(red: 0.43, green: 0.78, blue: 0.22)
+        }
+    }
+
+}
+
+private struct MarketBoardState: Identifiable {
+    let definition: MarketBoardDefinition
+    let localNow: String
+    let localDateLine: String
+    let nextTransitionLabel: String
+    let transitionStatusText: String
+    let transitionStatusColor: Color
+    let timelineSegments: [TimelineSegment]
+
+    var id: String { definition.id }
+
+    init(definition: MarketBoardDefinition, now: Date) {
+        self.definition = definition
+
+        let intervals = SessionPresentation.marketIntervalsAroundNow(for: definition, now: now)
+        let active = intervals.first(where: { $0.contains(now) })
+        let nextInterval = intervals.first(where: { $0.start > now }) ?? SessionPresentation.nextMarketInterval(for: definition, after: now)
+        let referenceInterval = active ?? nextInterval
+
+        self.localNow = SessionPresentation.timeString(in: definition.timeZone, for: now)
+        self.localDateLine = SessionPresentation.dateString(in: definition.timeZone, for: now)
+        self.nextTransitionLabel = active == nil
+            ? "Opens in \(SessionPresentation.relativeCountdown(to: referenceInterval.start, from: now))"
+            : "Closes in \(SessionPresentation.relativeCountdown(to: referenceInterval.end, from: now))"
+        self.transitionStatusText = active == nil ? "Closed" : "Open"
+        self.transitionStatusColor = active == nil ? Color.red : TickrPalette.success
+        self.timelineSegments = SessionPresentation.timelineSegments(for: definition, dayContaining: now)
+    }
+}
+
+private struct MarketSessionSidebarCard: View {
+    let state: MarketBoardState
+    let compact: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Text(state.definition.flag)
+                    .font(compact ? .subheadline : .headline)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(state.definition.cityName)
+                        .font(compact ? .caption.weight(.semibold) : .subheadline.weight(.semibold))
+                        .foregroundStyle(TickrPalette.text)
+                        .lineLimit(1)
+
+                    Text(state.localNow)
+                        .font(compact ? .caption.weight(.medium) : .subheadline.weight(.medium))
+                        .foregroundStyle(TickrPalette.muted)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 6)
+
+                Text(state.transitionStatusText)
+                    .font((compact ? Font.caption2 : Font.caption).weight(.semibold))
+                    .foregroundStyle(state.transitionStatusColor)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            Text(state.localDateLine)
+                .font(.caption2)
+                .foregroundStyle(TickrPalette.muted)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, compact ? 8 : 10)
+        .padding(.vertical, compact ? 8 : 9)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(TickrPalette.surface)
+        )
+    }
+}
+
+private struct MarketSessionTimelineRow: View {
+    let state: MarketBoardState
+    let timelineWidth: CGFloat
+    let compact: Bool
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.12))
+
+            VStack(alignment: .leading, spacing: 8) {
+                ZStack(alignment: .leading) {
+                    Capsule(style: .continuous)
+                        .fill(TickrPalette.surface)
+                        .frame(height: compact ? 8 : 10)
+
+                    ForEach(Array(state.timelineSegments.enumerated()), id: \.offset) { _, segment in
+                        Capsule(style: .continuous)
+                            .fill(state.definition.color)
+                            .frame(width: max(timelineWidth * segment.length, 10), height: compact ? 8 : 10)
+                            .offset(x: timelineWidth * segment.start)
+                    }
+                }
+                .frame(height: compact ? 8 : 10)
+
+                Text(state.nextTransitionLabel)
+                    .font((compact ? Font.caption2 : Font.caption).weight(.semibold))
+                    .foregroundStyle(TickrPalette.muted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .padding(.horizontal, compact ? 8 : 10)
+            .padding(.vertical, compact ? 8 : 9)
+        }
+    }
+}
+
+private struct CompactMarketTimelineRow: View {
+    let state: MarketBoardState
+    let timelineWidth: CGFloat
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(state.definition.flag)
+                    .font(.caption)
+
+                Text(state.definition.cityName)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(TickrPalette.text)
+                    .lineLimit(1)
+
+                Text(state.localNow)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(TickrPalette.muted)
+                    .lineLimit(1)
+
+                Spacer(minLength: 4)
+
+                Text(state.transitionStatusText)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(state.transitionStatusColor)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                ZStack(alignment: .leading) {
+                    Capsule(style: .continuous)
+                        .fill(TickrPalette.surface)
+                        .frame(height: 8)
+
+                    ForEach(Array(state.timelineSegments.enumerated()), id: \.offset) { _, segment in
+                        Capsule(style: .continuous)
+                            .fill(state.definition.color)
+                            .frame(width: max(timelineWidth * segment.length, 10), height: 8)
+                            .offset(x: timelineWidth * segment.start)
+                    }
+                }
+                .frame(height: 8)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(0.12))
+        )
+    }
+}
+
+private struct VolumeSidebarCard: View {
+    let title: String
+    let statusText: String
+    let tag: String
+    let tagColor: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(TickrPalette.text)
+
+            Text(statusText)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(TickrPalette.muted)
+                .lineLimit(1)
+
+            TickrPill(text: tag, tint: tagColor.opacity(0.14))
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(TickrPalette.surface)
+        )
+    }
+}
+
+private struct VolumeTimelineRow: View {
+    let snapshot: MarketActivitySnapshot
+    let markerDate: Date
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.12))
+
+            VolumeProfileWave(snapshot: snapshot, markerDate: markerDate, showsBackground: false)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 12)
+        }
+    }
+}
+
+private struct CompactVolumeTimelineRow: View {
+    let snapshot: MarketActivitySnapshot
+    let markerDate: Date
+    let timelineWidth: CGFloat
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("Trading volume")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(TickrPalette.text)
+
+                Text(snapshot.statusText)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(TickrPalette.muted)
+
+                Spacer(minLength: 4)
+
+                TickrPill(text: snapshot.tier.rawValue, tint: activityColor.opacity(0.14))
+            }
+
+            VolumeProfileWave(snapshot: snapshot, markerDate: markerDate, showsBackground: false)
+                .frame(width: timelineWidth, height: 62)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(0.12))
+        )
+    }
+
+    private var activityColor: Color {
+        switch snapshot.tier {
+        case .high:
+            TickrPalette.success
+        case .medium:
+            TickrPalette.warning
+        case .low:
+            Color(red: 0.80, green: 0.26, blue: 0.47)
+        }
+    }
+}
+
+private struct SessionNowMarker: View {
+    let xPosition: CGFloat
+    let timelineWidth: CGFloat
+    let height: CGFloat
+    let timeLabel: String
+    let isInteracting: Bool
+
+    private let markerWidth: CGFloat = 78
+    private let lineWidth: CGFloat = 3
+
+    var body: some View {
+        let clampedXPosition = min(max(xPosition, 0), timelineWidth)
+
+        return ZStack(alignment: .topLeading) {
+            ZStack(alignment: .top) {
+                if isInteracting {
+                    Text(timeLabel)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(TickrPalette.text)
+                        .fixedSize()
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(TickrPalette.surface)
+                        )
+                        .offset(y: -34)
+                }
+
+                VStack(spacing: 0) {
+                    Image(systemName: "triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(TickrPalette.accent)
+                        .rotationEffect(.degrees(180))
+                        .offset(y: -1)
+
+                    Rectangle()
+                        .fill(TickrPalette.accent)
+                        .frame(width: lineWidth, height: max(height + 12, 1))
+                        .shadow(color: TickrPalette.accent.opacity(0.2), radius: 6, x: 0, y: 0)
+                }
+            }
+            .frame(width: markerWidth)
+            .offset(x: clampedXPosition - (markerWidth / 2))
+        }
+        .frame(width: timelineWidth, alignment: .topLeading)
+        .contentShape(Rectangle())
+    }
+}
+
+private struct VolumeProfileWave: View {
+    let snapshot: MarketActivitySnapshot
+    let markerDate: Date
+    var showsBackground: Bool = true
 
     var body: some View {
         GeometryReader { proxy in
-            let width = proxy.size.width - 32
+            let size = proxy.size
+            let points = wavePoints(in: size)
+            let strokeGradient = LinearGradient(
+                colors: [
+                    TickrPalette.success,
+                    TickrPalette.warning,
+                    Color(red: 0.80, green: 0.26, blue: 0.47),
+                    TickrPalette.warning,
+                    TickrPalette.success
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
 
-            ZStack(alignment: .topLeading) {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(TickrPalette.surfaceStrong)
-
-                VStack(spacing: 14) {
-                    HStack {
-                        ForEach([0, 6, 12, 18, 24], id: \.self) { hour in
-                            Text(hour == 24 ? "24" : "\(hour)")
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(TickrPalette.muted)
-                                .frame(maxWidth: .infinity, alignment: hour == 0 ? .leading : .center)
-                        }
-                    }
-
-                    ForEach(sessionStates) { state in
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text(state.definition.shortTitle)
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(TickrPalette.text)
-                                Spacer()
-                                Text(state.localWindowLabel)
-                                    .font(.caption2)
-                                    .foregroundStyle(TickrPalette.muted)
-                            }
-
-                            ZStack(alignment: .leading) {
-                                Capsule(style: .continuous)
-                                    .fill(TickrPalette.surface)
-                                    .frame(height: 18)
-
-                                ForEach(Array(state.timelineSegments.enumerated()), id: \.offset) { _, segment in
-                                    Capsule(style: .continuous)
-                                        .fill(state.definition.color.opacity(state.isActive ? 1 : 0.55))
-                                        .frame(width: width * CGFloat(segment.length), height: 18)
-                                        .offset(x: 16 + width * CGFloat(segment.start))
-                                }
-                            }
-                        }
-                    }
+            ZStack {
+                if showsBackground {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    TickrPalette.surfaceStrong,
+                                    TickrPalette.surface
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
                 }
-                .padding(16)
+
+                waveFillPath(points: points, size: size)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                TickrPalette.success.opacity(0.24),
+                                TickrPalette.warning.opacity(0.18),
+                                Color(red: 0.80, green: 0.26, blue: 0.47).opacity(0.14),
+                                Color.clear
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+
+                waveStrokePath(points: points)
+                    .stroke(
+                        strokeGradient,
+                        style: StrokeStyle(lineWidth: 10, lineCap: .round, lineJoin: .round)
+                    )
+                    .blur(radius: 14)
+                    .opacity(0.28)
+
+                waveStrokePath(points: points)
+                    .stroke(
+                        strokeGradient,
+                        style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round)
+                    )
+                    .blur(radius: 4)
+                    .opacity(0.24)
+
+                waveStrokePath(points: points)
+                    .stroke(
+                        strokeGradient,
+                        style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round)
+                    )
+
             }
         }
+    }
+
+    private func waveY(sample: Double, height: CGFloat) -> CGFloat {
+        let normalizedValue = emphasizedSample(sample)
+        let verticalPadding = height * 0.10
+        let drawableHeight = max(height - (verticalPadding * 2), 1)
+        return verticalPadding + (1 - normalizedValue) * drawableHeight
+    }
+
+    private func wavePoints(in size: CGSize) -> [CGPoint] {
+        let samples = snapshot.sparklineSamples
+        let count = max(samples.count - 1, 1)
+
+        return samples.enumerated().map { index, sample in
+            let progress = Double(index) / Double(count)
+            return CGPoint(
+                x: size.width * progress,
+                y: waveY(sample: sample, height: size.height)
+            )
+        }
+    }
+
+    private func emphasizedSample(_ sample: Double) -> Double {
+        let clampedSample = min(max(sample, 0), 1)
+        let boostedSample = min(max(0.5 + ((clampedSample - 0.5) * 1.7), 0), 1)
+
+        if boostedSample < 0.5 {
+            return 0.5 * pow(boostedSample * 2, 1.45)
+        }
+
+        let mirroredSample = (1 - boostedSample) * 2
+        return 1 - (0.5 * pow(mirroredSample, 1.45))
+    }
+
+    private func waveStrokePath(points: [CGPoint]) -> Path {
+        Path { path in
+            guard let firstPoint = points.first else {
+                return
+            }
+
+            path.move(to: firstPoint)
+
+            if points.count == 2, let lastPoint = points.last {
+                path.addLine(to: lastPoint)
+            } else {
+                for index in 1..<points.count {
+                    let previousPoint = points[index - 1]
+                    let currentPoint = points[index]
+                    let midpoint = CGPoint(
+                        x: (previousPoint.x + currentPoint.x) / 2,
+                        y: (previousPoint.y + currentPoint.y) / 2
+                    )
+
+                    path.addQuadCurve(to: midpoint, control: previousPoint)
+                    path.addQuadCurve(to: currentPoint, control: midpoint)
+                }
+            }
+        }
+    }
+
+    private func waveFillPath(points: [CGPoint], size: CGSize) -> Path {
+        var path = waveStrokePath(points: points)
+
+        guard let lastPoint = points.last else {
+            return path
+        }
+
+        path.addLine(to: CGPoint(x: lastPoint.x, y: size.height))
+        path.addLine(to: CGPoint(x: 0, y: size.height))
+        path.closeSubpath()
+
+        return path
     }
 }
 
@@ -697,7 +1165,7 @@ private struct OverlapState: Identifiable {
     }
 }
 
-private enum SessionPresentation {
+enum SessionPresentation {
     static let newYorkTimeZone = TimeZone(identifier: "America/New_York") ?? .current
 
     static let utcCalendar: Calendar = {
@@ -728,6 +1196,19 @@ private enum SessionPresentation {
         intervalsAroundNow(for: definition, now: date)
             .first(where: { $0.start > date })
             ?? sessionInterval(for: definition, around: date, dayOffset: 4)
+            ?? DateInterval(start: date, duration: 60)
+    }
+
+    static func marketIntervalsAroundNow(for definition: MarketBoardDefinition, now: Date) -> [DateInterval] {
+        (-2...3).compactMap { marketInterval(for: definition, around: now, dayOffset: $0) }
+            .filter { $0.end > now.addingTimeInterval(-24 * 60 * 60) }
+            .sorted { $0.start < $1.start }
+    }
+
+    static func nextMarketInterval(for definition: MarketBoardDefinition, after date: Date) -> DateInterval {
+        marketIntervalsAroundNow(for: definition, now: date)
+            .first(where: { $0.start > date })
+            ?? marketInterval(for: definition, around: date, dayOffset: 4)
             ?? DateInterval(start: date, duration: 60)
     }
 
@@ -807,17 +1288,33 @@ private enum SessionPresentation {
     }
 
     static func timelineSegments(for definition: ForexSessionDefinition, dayContaining date: Date) -> [TimelineSegment] {
-        let localDayStart = localCalendar.startOfDay(for: date)
-        let localDayEnd = localCalendar.date(byAdding: .day, value: 1, to: localDayStart) ?? localDayStart
-        let localDayInterval = DateInterval(start: localDayStart, end: localDayEnd)
+        let localDayInterval = localDayInterval(containing: date)
+        let localDayStart = localDayInterval.start
+        let localDayDuration = localDayInterval.duration
 
         return intervalsAroundNow(for: definition, now: date).compactMap { interval in
             guard let intersection = interval.intersection(with: localDayInterval) else {
                 return nil
             }
 
-            let startFraction = intersection.start.timeIntervalSince(localDayStart) / (24 * 60 * 60)
-            let lengthFraction = intersection.duration / (24 * 60 * 60)
+            let startFraction = intersection.start.timeIntervalSince(localDayStart) / localDayDuration
+            let lengthFraction = intersection.duration / localDayDuration
+            return TimelineSegment(start: startFraction, length: lengthFraction)
+        }
+    }
+
+    static func timelineSegments(for definition: MarketBoardDefinition, dayContaining date: Date) -> [TimelineSegment] {
+        let localDayInterval = localDayInterval(containing: date)
+        let localDayStart = localDayInterval.start
+        let localDayDuration = localDayInterval.duration
+
+        return marketIntervalsAroundNow(for: definition, now: date).compactMap { interval in
+            guard let intersection = interval.intersection(with: localDayInterval) else {
+                return nil
+            }
+
+            let startFraction = intersection.start.timeIntervalSince(localDayStart) / localDayDuration
+            let lengthFraction = intersection.duration / localDayDuration
             return TimelineSegment(start: startFraction, length: lengthFraction)
         }
     }
@@ -832,6 +1329,82 @@ private enum SessionPresentation {
         return "\(hours)h \(minutes)m"
     }
 
+    static func timeString(in timeZone: TimeZone, for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "h:mm a"
+        formatter.amSymbol = "am"
+        formatter.pmSymbol = "pm"
+        return formatter.string(from: date)
+    }
+
+    static func dateString(in timeZone: TimeZone, for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "EEE MMM d"
+        return formatter.string(from: date)
+    }
+
+    static func zoneLabel(for timeZone: TimeZone) -> String {
+        timeZone.localizedName(for: .shortStandard, locale: .current) ?? timeZone.identifier
+    }
+
+    static func dayFraction(for date: Date) -> Double {
+        let dayInterval = localDayInterval(containing: date)
+        let elapsed = date.timeIntervalSince(dayInterval.start)
+        return min(max(elapsed / dayInterval.duration, 0), 1)
+    }
+
+    static func date(for dayFraction: Double, onSameDayAs referenceDate: Date) -> Date {
+        let dayInterval = localDayInterval(containing: referenceDate)
+        let clampedFraction = min(max(dayFraction, 0), 1)
+        return dayInterval.start.addingTimeInterval(dayInterval.duration * clampedFraction)
+    }
+
+    static func markerTimeString(for date: Date) -> String {
+        EventDateFormatter.timeString(from: date, useUTC: false, use24HourTime: false)
+    }
+
+    static func marketBoundaryFractions(onSameDayAs referenceDate: Date) -> [Double] {
+        let localDayInterval = localDayInterval(containing: referenceDate)
+        let localDayStart = localDayInterval.start
+        let localDayDuration = localDayInterval.duration
+        var fractions: [Double] = []
+
+        for definition in MarketBoardDefinition.allCases {
+            let intervals = marketIntervalsAroundNow(for: definition, now: referenceDate)
+            for interval in intervals {
+                let boundaries = [interval.start, interval.end]
+                for boundary in boundaries where localDayInterval.contains(boundary) {
+                    fractions.append(boundary.timeIntervalSince(localDayStart) / localDayDuration)
+                }
+            }
+        }
+
+        return fractions
+    }
+
+    static func hourLabel(for hour: Int) -> String {
+        let normalizedHour = hour % 24
+        switch normalizedHour {
+        case 0:
+            return "12"
+        case 1...12:
+            return "\(normalizedHour)"
+        default:
+            return "\(normalizedHour - 12)"
+        }
+    }
+
+    static func currentLocalHour(on date: Date) -> Int {
+        localCalendar.component(.hour, from: date)
+    }
+
+    private static func localDayInterval(containing date: Date) -> DateInterval {
+        localCalendar.dateInterval(of: .day, for: date)
+            ?? DateInterval(start: localCalendar.startOfDay(for: date), duration: 24 * 60 * 60)
+    }
+
     private static func localTime(_ date: Date) -> String {
         EventDateFormatter.timeString(from: date, useUTC: false, use24HourTime: false)
     }
@@ -840,6 +1413,30 @@ private enum SessionPresentation {
         intervalsAroundNow(for: definition, now: referenceDate)
             .first(where: { $0.contains(referenceDate) || $0.start > referenceDate })
             ?? nextInterval(for: definition, after: referenceDate)
+    }
+
+    private static func marketInterval(for definition: MarketBoardDefinition, around date: Date, dayOffset: Int) -> DateInterval? {
+        guard
+            let start = zonedDate(
+                in: definition.timeZone,
+                relativeTo: date,
+                dayOffset: dayOffset,
+                hour: definition.openHour,
+                minute: 0
+            ),
+            let end = zonedDate(
+                in: definition.timeZone,
+                relativeTo: date,
+                dayOffset: dayOffset,
+                hour: definition.closeHour,
+                minute: 0
+            )
+        else {
+            return nil
+        }
+
+        let interval = DateInterval(start: start, end: max(end, start.addingTimeInterval(60)))
+        return clipToForexWeek(interval)
     }
 
     private static func sessionInterval(for definition: ForexSessionDefinition, around date: Date, dayOffset: Int) -> DateInterval? {
@@ -915,7 +1512,7 @@ private enum SessionPresentation {
     }
 }
 
-private struct TimelineSegment {
+struct TimelineSegment {
     let start: Double
     let length: Double
 }

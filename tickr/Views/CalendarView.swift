@@ -75,47 +75,53 @@ struct CalendarView: View {
         Array(Set(allWeekEvents.compactMap(\.category))).sorted()
     }
 
-    private var activeFilters: [FilterChip] {
-        var filters: [FilterChip] = []
+    private var activeFilterDescriptions: [String] {
+        var filters: [String] = []
 
         switch preferences.minimumImpact {
         case .high:
-            filters.append(FilterChip(title: "High only") {
-                preferences.minimumImpact = .low
-            })
+            filters.append("High only")
         case .medium:
-            filters.append(FilterChip(title: "High + Medium") {
-                preferences.minimumImpact = .low
-            })
+            filters.append("High + Medium")
         case .low:
             break
         }
 
         if let currency = preferences.selectedCurrencyCode {
-            filters.append(FilterChip(title: currency) {
-                preferences.selectedCurrencyCode = nil
-            })
+            filters.append(currency)
         }
 
         if let country = preferences.selectedCountryCode {
-            filters.append(FilterChip(title: country) {
-                preferences.selectedCountryCode = nil
-            })
+            filters.append(country)
         }
 
         if let category = preferences.selectedCategory {
-            filters.append(FilterChip(title: category) {
-                preferences.selectedCategory = nil
-            })
+            filters.append(category)
         }
 
         if preferences.showOnlyWatchedPairs {
-            filters.append(FilterChip(title: "Traded pairs") {
-                preferences.showOnlyWatchedPairs = false
-            })
+            filters.append("Traded pairs")
         }
 
         return filters
+    }
+
+    private var activeFilterSummary: String {
+        let filterCount = activeFilterDescriptions.count
+
+        guard filterCount > 0 else {
+            return "All events"
+        }
+
+        if preferences.showOnlyWatchedPairs, filterCount == 1 {
+            return "Traded pairs"
+        }
+
+        if filterCount == 1 {
+            return "1 filter active"
+        }
+
+        return "\(filterCount) filters active"
     }
 
     private var impactFilterLabel: String {
@@ -163,15 +169,7 @@ struct CalendarView: View {
     }
 
     private var shouldShowJumpToTodayButton: Bool {
-        if weekOffset != 0 {
-            return true
-        }
-
-        guard let todayHeaderOffset else {
-            return false
-        }
-
-        return todayHeaderOffset < 72 || todayHeaderOffset > 220
+        weekOffset != 0
     }
 
     var body: some View {
@@ -181,10 +179,6 @@ struct CalendarView: View {
                     LazyVStack(alignment: .leading, spacing: TickrLayout.sectionSpacing, pinnedViews: [.sectionHeaders]) {
                         header
                         filterControls
-
-                        if !activeFilters.isEmpty {
-                            activeFilterRow
-                        }
 
                         if let lastRefreshDate = viewModel.lastRefreshDate {
                             Text("Updated \(RelativeDateTimeFormatter().localizedString(for: lastRefreshDate, relativeTo: Date()))")
@@ -207,18 +201,19 @@ struct CalendarView: View {
                                         } else {
                                             VStack(spacing: 12) {
                                                 ForEach(section.events) { event in
+                                                    let isNotificationScheduled = scheduledNotificationEventIDs.contains(event.id)
                                                     NavigationLink {
                                                         EconomicEventDetailView(event: event, preferences: preferences)
                                                     } label: {
                                                         EconomicEventRow(
                                                             event: event,
                                                             preferences: preferences,
-                                                            isNotificationScheduled: scheduledNotificationEventIDs.contains(event.id)
+                                                            isNotificationScheduled: isNotificationScheduled
                                                         )
                                                     }
                                                     .buttonStyle(.plain)
                                                     .contextMenu {
-                                                        Button(scheduledNotificationEventIDs.contains(event.id) ? "Remove notification" : "Notify me") {
+                                                        Button(isNotificationScheduled ? "Remove notification" : "Notify me") {
                                                             Task {
                                                                 await toggleNotification(for: event)
                                                             }
@@ -239,23 +234,6 @@ struct CalendarView: View {
             }
             .coordinateSpace(name: "calendar-scroll")
             .background(Color.clear)
-            .overlay(alignment: .bottomTrailing) {
-                if shouldShowJumpToTodayButton {
-                    Button("Jump to today") {
-                        jumpToToday()
-                    }
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(TickrPalette.accent)
-                    )
-                    .padding(.trailing, TickrLayout.horizontalPadding)
-                    .padding(.bottom, 110)
-                }
-            }
             .overlay {
                 if viewModel.isLoading && viewModel.events.isEmpty {
                     ProgressView("Loading events...")
@@ -273,13 +251,14 @@ struct CalendarView: View {
             .navigationTitle("Calendar")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        jumpToToday()
-                    } label: {
-                        Image(systemName: "scope")
+                if shouldShowJumpToTodayButton {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Jump to today") {
+                            jumpToToday()
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .tint(TickrPalette.accent)
                     }
-                    .tint(TickrPalette.accent)
                 }
             }
             .scrollContentBackground(.hidden)
@@ -325,125 +304,101 @@ struct CalendarView: View {
                 }
             }
             .animation(.easeInOut(duration: 0.18), value: filteredEvents.map(\.id))
-            .animation(.easeInOut(duration: 0.18), value: activeFilters.map(\.title))
+            .animation(.easeInOut(duration: 0.18), value: activeFilterDescriptions)
         }
     }
 
     private var header: some View {
-        TickrCard {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("This Week")
-                            .font(.caption.weight(.semibold))
-                            .tracking(1.2)
-                            .foregroundStyle(TickrPalette.muted)
-                        Text(weekTitle)
-                            .font(.system(size: 28, weight: .bold, design: .rounded))
-                            .foregroundStyle(TickrPalette.text)
-                    }
+        HStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(weekOffset == 0 ? "This Week" : "Calendar Week")
+                    .font(.caption.weight(.semibold))
+                    .tracking(1)
+                    .foregroundStyle(TickrPalette.muted)
+                Text(weekTitle)
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(TickrPalette.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
 
-                    Spacer()
+            Spacer()
 
-                    HStack(spacing: 10) {
-                        weekStepperButton(systemName: "chevron.left") {
-                            weekOffset -= 1
-                        }
-
-                        weekStepperButton(systemName: "chevron.right") {
-                            weekOffset += 1
-                        }
-                    }
+            HStack(spacing: 8) {
+                weekStepperButton(systemName: "chevron.left") {
+                    weekOffset -= 1
                 }
 
-                Text("Monday to Friday, chronological, and built for fast scans.")
-                    .font(.subheadline)
-                    .foregroundStyle(TickrPalette.muted)
+                weekStepperButton(systemName: "chevron.right") {
+                    weekOffset += 1
+                }
             }
         }
     }
 
     private var filterControls: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
-                Menu {
+        HStack(spacing: 12) {
+            Menu {
+                Section("Impact") {
                     Button("All") { preferences.minimumImpact = .low }
                     Button("High + Medium") { preferences.minimumImpact = .medium }
                     Button("High only") { preferences.minimumImpact = .high }
-                } label: {
-                    FilterMenuLabel(title: "Impact", value: impactFilterLabel)
                 }
 
-                Menu {
+                Section("Currency") {
                     Button("All currencies") { preferences.selectedCurrencyCode = nil }
                     ForEach(availableCurrencies, id: \.self) { currency in
                         Button(currency) { preferences.selectedCurrencyCode = currency }
                     }
-                } label: {
-                    FilterMenuLabel(title: "Currency", value: preferences.selectedCurrencyCode ?? "All")
                 }
 
-                Menu {
+                Section("Country") {
                     Button("All countries") { preferences.selectedCountryCode = nil }
                     ForEach(availableCountries, id: \.self) { country in
                         Button("\(CountryDisplay.flag(for: country)) \(country)") {
                             preferences.selectedCountryCode = country
                         }
                     }
-                } label: {
-                    FilterMenuLabel(title: "Country", value: preferences.selectedCountryCode ?? "All")
                 }
 
-                Menu {
+                Section("Category") {
                     Button("All categories") { preferences.selectedCategory = nil }
                     ForEach(availableCategories, id: \.self) { category in
                         Button(category) { preferences.selectedCategory = category }
                     }
-                } label: {
-                    FilterMenuLabel(title: "Category", value: preferences.selectedCategory ?? "All")
                 }
 
-                Button {
-                    preferences.showOnlyWatchedPairs.toggle()
-                } label: {
-                    FilterToggleLabel(title: "Pairs", value: "Traded only", isOn: preferences.showOnlyWatchedPairs)
+                Section("Pairs") {
+                    Button(preferences.showOnlyWatchedPairs ? "Show all pairs" : "Traded pairs only") {
+                        preferences.showOnlyWatchedPairs.toggle()
+                    }
                 }
+            } label: {
+                FilterMenuLabel(
+                    title: "Filters",
+                    value: activeFilterDescriptions.isEmpty ? "All events" : "\(activeFilterDescriptions.count) active"
+                )
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(activeFilterSummary)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(TickrPalette.text)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            if !activeFilterDescriptions.isEmpty {
+                Button("Clear") {
+                    clearFilters()
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(TickrPalette.accent)
                 .buttonStyle(.plain)
             }
-            .padding(.vertical, 2)
         }
-    }
-
-    private var activeFilterRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(activeFilters.indices, id: \.self) { index in
-                    let filter = activeFilters[index]
-                    Button {
-                        filter.remove()
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text(filter.title)
-                            Image(systemName: "xmark")
-                                .font(.caption.weight(.bold))
-                        }
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(TickrPalette.text)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(TickrPalette.surfaceStrong)
-                                .overlay {
-                                    Capsule(style: .continuous)
-                                        .stroke(TickrPalette.stroke, lineWidth: 1)
-                                }
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
+        .padding(.vertical, 2)
     }
 
     private func dayHeader(for section: DaySection) -> some View {
@@ -451,7 +406,7 @@ struct CalendarView: View {
             toggleSection(section.day)
         } label: {
             HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 3) {
                     Text(dayHeaderTitle(for: section.day))
                         .font(.headline.weight(.semibold))
                         .foregroundStyle(TickrPalette.text)
@@ -471,17 +426,7 @@ struct CalendarView: View {
                     .font(.caption.weight(.bold))
                     .foregroundStyle(TickrPalette.muted)
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(TickrPalette.backgroundTop.opacity(0.96))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .stroke(TickrPalette.stroke, lineWidth: 1)
-                    }
-            )
+            .padding(.vertical, 8)
             .background(todayHeaderOffsetReader(isToday: section.isToday))
         }
         .buttonStyle(.plain)
@@ -542,6 +487,14 @@ struct CalendarView: View {
         } else {
             collapsedDays.insert(day)
         }
+    }
+
+    private func clearFilters() {
+        preferences.minimumImpact = .low
+        preferences.selectedCurrencyCode = nil
+        preferences.selectedCountryCode = nil
+        preferences.selectedCategory = nil
+        preferences.showOnlyWatchedPairs = false
     }
 
     private func loadVisibleWeek(using proxy: ScrollViewProxy) async {
@@ -646,8 +599,8 @@ private struct EconomicEventRow: View {
 
     var body: some View {
         TickrCard {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top, spacing: 14) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
                     Text(
                         EventDateFormatter.timeString(
                             from: event.timestamp,
@@ -657,14 +610,14 @@ private struct EconomicEventRow: View {
                     )
                     .font(.headline.monospacedDigit().weight(.bold))
                     .foregroundStyle(TickrPalette.text)
-                    .frame(width: 78, alignment: .leading)
+                    .frame(width: 72, alignment: .leading)
 
                     Circle()
                         .fill(event.impactLevel.color)
                         .frame(width: 10, height: 10)
                         .padding(.top, 5)
 
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 6) {
                         HStack(alignment: .top) {
                             VStack(alignment: .leading, spacing: 6) {
                                 HStack(spacing: 8) {
@@ -675,18 +628,7 @@ private struct EconomicEventRow: View {
                                         .multilineTextAlignment(.leading)
                                 }
 
-                                HStack(spacing: 8) {
-                                    Text(event.currencyCode)
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(TickrPalette.muted)
-
-                                    if let category = event.category {
-                                        Text(category)
-                                            .font(.caption)
-                                            .foregroundStyle(TickrPalette.muted)
-                                            .lineLimit(1)
-                                    }
-                                }
+                                rowMetadata
                             }
 
                             Spacer(minLength: 8)
@@ -698,22 +640,58 @@ private struct EconomicEventRow: View {
                             }
                         }
 
-                        ViewThatFits(in: .horizontal) {
-                            HStack(spacing: 10) {
-                                EventMetric(label: "Forecast", value: event.forecast)
-                                EventMetric(label: "Previous", value: event.previous)
-                                EventMetric(label: "Actual", value: event.actual, animateUpdates: true)
-                            }
-
-                            VStack(spacing: 10) {
-                                EventMetric(label: "Forecast", value: event.forecast)
-                                EventMetric(label: "Previous", value: event.previous)
-                                EventMetric(label: "Actual", value: event.actual, animateUpdates: true)
-                            }
-                        }
+                        eventMetricsSummary
                     }
                 }
             }
+        }
+    }
+
+    private var rowMetadata: some View {
+        HStack(spacing: 8) {
+            Text(event.currencyCode)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(TickrPalette.text)
+
+            Text(event.impactLevel.label)
+                .font(.caption)
+                .foregroundStyle(event.impactLevel.color)
+
+            if let category = event.category {
+                Text(category)
+                    .font(.caption)
+                    .foregroundStyle(TickrPalette.muted)
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    private var eventMetricsSummary: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                compactMetric(label: "Forecast", value: event.forecast)
+                compactMetric(label: "Previous", value: event.previous)
+                compactMetric(label: "Actual", value: EventPresentation.actualResultsPlaceholderShort)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                compactMetric(label: "Forecast", value: event.forecast)
+                compactMetric(label: "Previous", value: event.previous)
+                compactMetric(label: "Actual", value: EventPresentation.actualResultsPlaceholderShort)
+            }
+        }
+    }
+
+    private func compactMetric(label: String, value: String?) -> some View {
+        HStack(spacing: 6) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(TickrPalette.muted)
+            Text(value ?? "—")
+                .font(.caption.weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(TickrPalette.text)
+                .lineLimit(1)
         }
     }
 }
@@ -752,14 +730,8 @@ private struct EconomicEventDetailView: View {
             TickrScreen {
                 VStack(alignment: .leading, spacing: TickrLayout.sectionSpacing) {
                     detailHeader
-                    numbersSection
-                    affectedPairsSection
-                    explainerSection
-                    actionSection
-
-                    Text(sourceAttribution)
-                        .font(.caption)
-                        .foregroundStyle(TickrPalette.muted)
+                    marketSnapshotSection
+                    contextSection
                 }
             }
         }
@@ -796,7 +768,7 @@ private struct EconomicEventDetailView: View {
 
     private var detailHeader: some View {
         TickrCard {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 14) {
                 Text(event.title)
                     .font(.system(size: 30, weight: .bold, design: .rounded))
                     .foregroundStyle(TickrPalette.text)
@@ -804,64 +776,28 @@ private struct EconomicEventDetailView: View {
                 HStack(spacing: 10) {
                     TickrPill(text: "\(CountryDisplay.flag(for: event.countryCode)) \(event.currencyCode)")
                     TickrPill(text: event.impactLevel.label, tint: event.impactLevel.color.opacity(0.18))
-                    TickrPill(text: categoryDisplayName, tint: TickrPalette.surfaceStrong)
                 }
 
-                Text(eventDateString)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(TickrPalette.text)
-
-                if event.timestamp > Date() {
-                    TimelineView(.periodic(from: .now, by: 1)) { context in
-                        Text(EventPresentation.countdownString(to: event.timestamp, now: context.date))
-                            .font(.subheadline.weight(.semibold))
-                            .monospacedDigit()
-                            .foregroundStyle(TickrPalette.accent)
-                    }
-                }
-            }
-        }
-    }
-
-    private var numbersSection: some View {
-        TickrCard {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Numbers")
-                    .font(.headline)
-                    .foregroundStyle(TickrPalette.text)
-
-                HStack(spacing: 12) {
-                    DetailValueColumn(title: "Forecast", primaryValue: event.forecast ?? "—")
-                    DetailValueColumn(title: "Previous", primaryValue: event.previous ?? "—")
-                    DetailValueColumn(
-                        title: "Actual",
-                        primaryValue: event.actual ?? "—",
-                        secondaryValue: event.actual == nil ? "Coming Soon" : EventPresentation.actualResultLabel(for: event),
-                        accentColor: EventPresentation.actualResultColor(for: event)
-                    )
-                }
-            }
-        }
-    }
-
-    private var affectedPairsSection: some View {
-        TickrCard {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Affected Pairs")
-                    .font(.headline)
-                    .foregroundStyle(TickrPalette.text)
-
-                if event.relatedPairs.isEmpty {
-                    Text("No pair mapping is available for this event yet.")
+                if categoryDisplayName != "Macroeconomic" || event.category != nil {
+                    Text(categoryDisplayName)
                         .font(.subheadline)
                         .foregroundStyle(TickrPalette.muted)
-                } else {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 108), spacing: 10)], alignment: .leading, spacing: 10) {
-                        ForEach(event.relatedPairs, id: \.self) { pair in
-                            TickrPill(
-                                text: preferences.isPairWatched(pair) ? "\(pair) Watchlist" : pair,
-                                tint: preferences.isPairWatched(pair) ? TickrPalette.accentSoft : TickrPalette.surfaceStrong
-                            )
+                }
+
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(eventDateString)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(TickrPalette.text)
+
+                    if event.timestamp > Date() {
+                        Text("•")
+                            .foregroundStyle(TickrPalette.muted)
+
+                        TimelineView(.periodic(from: .now, by: 1)) { context in
+                            Text(EventPresentation.countdownString(to: event.timestamp, now: context.date))
+                                .font(.subheadline.weight(.semibold))
+                                .monospacedDigit()
+                                .foregroundStyle(TickrPalette.accent)
                         }
                     }
                 }
@@ -869,26 +805,72 @@ private struct EconomicEventDetailView: View {
         }
     }
 
-    private var explainerSection: some View {
+    private var marketSnapshotSection: some View {
         TickrCard {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("What This Event Means")
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Market Snapshot")
+                    .font(.headline)
+                    .foregroundStyle(TickrPalette.text)
+
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 12) {
+                        DetailValueColumn(title: "Forecast", primaryValue: event.forecast ?? "—")
+                        DetailValueColumn(title: "Previous", primaryValue: event.previous ?? "—")
+                        DetailValueColumn(
+                            title: "Actual",
+                            primaryValue: EventPresentation.actualResultsPlaceholderShort,
+                            secondaryValue: EventPresentation.actualResultsPlaceholderLong
+                        )
+                    }
+
+                    VStack(spacing: 12) {
+                        DetailValueColumn(title: "Forecast", primaryValue: event.forecast ?? "—")
+                        DetailValueColumn(title: "Previous", primaryValue: event.previous ?? "—")
+                        DetailValueColumn(
+                            title: "Actual",
+                            primaryValue: EventPresentation.actualResultsPlaceholderShort,
+                            secondaryValue: EventPresentation.actualResultsPlaceholderLong
+                        )
+                    }
+                }
+
+                Divider()
+                    .overlay(TickrPalette.stroke)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Affected Pairs")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(TickrPalette.text)
+
+                    if event.relatedPairs.isEmpty {
+                        Text("No pair mapping is available for this event yet.")
+                            .font(.subheadline)
+                            .foregroundStyle(TickrPalette.muted)
+                    } else {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 108), spacing: 10)], alignment: .leading, spacing: 10) {
+                            ForEach(event.relatedPairs, id: \.self) { pair in
+                                TickrPill(
+                                    text: preferences.isPairWatched(pair) ? "\(pair) Watchlist" : pair,
+                                    tint: preferences.isPairWatched(pair) ? TickrPalette.accentSoft : TickrPalette.surfaceStrong
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var contextSection: some View {
+        TickrCard {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Why It Matters")
                     .font(.headline)
                     .foregroundStyle(TickrPalette.text)
 
                 Text(EventPresentation.explainer(for: event))
                     .font(.subheadline)
                     .foregroundStyle(TickrPalette.muted)
-            }
-        }
-    }
-
-    private var actionSection: some View {
-        TickrCard {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Actions")
-                    .font(.headline)
-                    .foregroundStyle(TickrPalette.text)
 
                 HStack(spacing: 12) {
                     Button {
@@ -905,6 +887,10 @@ private struct EconomicEventDetailView: View {
                     }
                     .buttonStyle(.plain)
                 }
+
+                Text(sourceAttribution)
+                    .font(.caption)
+                    .foregroundStyle(TickrPalette.muted)
             }
         }
     }
@@ -1098,6 +1084,9 @@ enum EventPresentation {
             "\(minutesBefore) minutes before"
         }
     }
+
+    static let actualResultsPlaceholderShort = "Pending"
+    static let actualResultsPlaceholderLong = "Actual results are not implemented yet and will be added once the calendar uses a live API feed."
 
     static func actualResultLabel(for event: EconomicEvent) -> String {
         switch actualComparison(for: event) {
@@ -1295,7 +1284,7 @@ private struct EventShareCard: View {
                 HStack(spacing: 12) {
                     shareMetric(title: "Forecast", value: event.forecast ?? "—")
                     shareMetric(title: "Previous", value: event.previous ?? "—")
-                    shareMetric(title: "Actual", value: event.actual ?? "—")
+                    shareMetric(title: "Actual", value: EventPresentation.actualResultsPlaceholderShort)
                 }
             }
             .padding(28)
@@ -1372,45 +1361,12 @@ private struct FilterMenuLabel: View {
     }
 }
 
-private struct FilterToggleLabel: View {
-    let title: String
-    let value: String
-    let isOn: Bool
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(isOn ? Color.white.opacity(0.8) : TickrPalette.muted)
-
-            Text(value)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(isOn ? Color.white : TickrPalette.text)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(
-            Capsule(style: .continuous)
-                .fill(isOn ? TickrPalette.accent : TickrPalette.surfaceStrong)
-                .overlay {
-                    Capsule(style: .continuous)
-                        .stroke(TickrPalette.stroke, lineWidth: isOn ? 0 : 1)
-                }
-        )
-    }
-}
-
 private struct DaySection: Identifiable {
     let day: Date
     let events: [EconomicEvent]
     let isToday: Bool
 
     var id: Date { day }
-}
-
-private struct FilterChip {
-    let title: String
-    let remove: () -> Void
 }
 
 private enum CalendarEmptyState {
