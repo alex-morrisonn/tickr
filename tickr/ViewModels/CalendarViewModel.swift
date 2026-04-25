@@ -11,13 +11,15 @@ final class CalendarViewModel {
     var errorMessage: String?
     var lastRefreshDate: Date?
     var visibleInterval: DateInterval?
+    var dataSource: CalendarDataSource?
+    var isShowingFallbackData = false
 
     init(service: CalendarService) {
         self.service = service
     }
 
-    func loadCurrentWeek() async {
-        let interval = Calendar.tradingWeekInterval()
+    func loadCurrentWeek(timeZone: TimeZone = .current) async {
+        let interval = Calendar.tradingWeekInterval(timeZone: timeZone)
         await load(interval: interval, forceRefresh: false)
     }
 
@@ -26,8 +28,8 @@ final class CalendarViewModel {
         await load(interval: interval, forceRefresh: true)
     }
 
-    func loadWeek(referenceDate: Date = Date(), weekOffset: Int = 0) async {
-        let interval = Calendar.tradingWeekInterval(referenceDate: referenceDate, weekOffset: weekOffset)
+    func loadWeek(referenceDate: Date = Date(), weekOffset: Int = 0, timeZone: TimeZone = .current) async {
+        let interval = Calendar.tradingWeekInterval(referenceDate: referenceDate, weekOffset: weekOffset, timeZone: timeZone)
         await load(interval: interval, forceRefresh: false)
     }
 
@@ -46,15 +48,21 @@ final class CalendarViewModel {
         visibleInterval = interval
 
         do {
+            let result: CalendarFetchResult
             if forceRefresh, let remoteService = service as? RemoteCalendarService {
-                events = try await remoteService.refreshEvents(from: interval.start, to: interval.end)
+                result = try await remoteService.refreshEvents(from: interval.start, to: interval.end)
             } else {
-                events = try await service.fetchEvents(from: interval.start, to: interval.end)
+                result = try await service.fetchEvents(from: interval.start, to: interval.end)
             }
-            lastRefreshDate = Date()
+            events = result.events
+            dataSource = result.source
+            isShowingFallbackData = result.isFallback
+            lastRefreshDate = result.lastUpdated
         } catch {
             events = []
             errorMessage = error.localizedDescription
+            dataSource = nil
+            isShowingFallbackData = false
         }
 
         isLoading = false
@@ -69,12 +77,40 @@ final class CalendarViewModel {
     }
 
     func events(forPair symbol: String) -> [EconomicEvent] {
-        events.filter { $0.relatedPairs.contains(symbol) }
+        let normalizedSymbol = Self.normalizePairSymbol(symbol)
+        let pairCurrencies = Self.currencyCodes(inPairSymbol: normalizedSymbol)
+
+        return events.filter { event in
+            let normalizedEventPairs = Set(event.relatedPairs.map(Self.normalizePairSymbol(_:)))
+
+            if normalizedEventPairs.contains(normalizedSymbol) {
+                return true
+            }
+
+            return pairCurrencies.contains(event.currencyCode.uppercased())
+        }
     }
 
     func nextEvent(forPair symbol: String, now: Date = Date()) -> EconomicEvent? {
         events(forPair: symbol)
             .filter { $0.timestamp >= now }
             .min { $0.timestamp < $1.timestamp }
+    }
+
+    private static func currencyCodes(inPairSymbol symbol: String) -> Set<String> {
+        guard symbol.count == 6 else {
+            return []
+        }
+
+        return [
+            String(symbol.prefix(3)),
+            String(symbol.suffix(3))
+        ]
+    }
+
+    private static func normalizePairSymbol(_ symbol: String) -> String {
+        symbol
+            .uppercased()
+            .filter(\.isLetter)
     }
 }

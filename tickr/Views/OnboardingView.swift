@@ -59,7 +59,7 @@ struct OnboardingView: View {
     private var progressHeader: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Tickr")
+                Text("Session Watch")
                     .font(.caption.weight(.semibold))
                     .tracking(1.2)
                     .foregroundStyle(TickrPalette.muted)
@@ -83,7 +83,7 @@ struct OnboardingView: View {
         VStack(alignment: .leading, spacing: 18) {
             Spacer(minLength: 20)
 
-            Text("Tickr")
+            Text("Session Watch")
                 .font(.system(size: 36, weight: .bold, design: .rounded))
                 .foregroundStyle(TickrPalette.text)
 
@@ -110,7 +110,7 @@ struct OnboardingView: View {
                 .font(.system(size: 28, weight: .bold, design: .rounded))
                 .foregroundStyle(TickrPalette.text)
 
-            Text("Choose the pairs you want Tickr to prioritize. You can change this anytime.")
+            Text("Choose the pairs you want Session Watch to prioritize. You can change this anytime.")
                 .font(.subheadline)
                 .foregroundStyle(TickrPalette.muted)
 
@@ -268,13 +268,13 @@ struct OnboardingView: View {
     private var notificationStatusCopy: String {
         switch notificationAuthorizationStatus {
         case .denied:
-            "Notifications are turned off for Tickr. Open Settings to allow alerts, then come back to finish setup."
+            "Notifications are turned off for Session Watch. Open Settings to allow alerts, then come back to finish setup."
         case .authorized, .provisional, .ephemeral:
-            "Tickr can send alerts on this device."
+            "Session Watch can send alerts on this device."
         case .notDetermined:
-            "Tickr will ask for notification permission when you continue."
+            "Session Watch will ask for notification permission when you continue."
         @unknown default:
-            "Tickr will check your notification access when you continue."
+            "Session Watch will check your notification access when you continue."
         }
     }
 }

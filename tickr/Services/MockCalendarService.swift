@@ -1,12 +1,19 @@
 import Foundation
 
 struct MockCalendarService: CalendarService {
-    func fetchEvents(from startDate: Date, to endDate: Date) async throws -> [EconomicEvent] {
+    func fetchEvents(from startDate: Date, to endDate: Date) async throws -> CalendarFetchResult {
         try await Task.sleep(for: .milliseconds(350))
 
-        return weeklyEvents()
+        let events = weeklyEvents()
             .filter { $0.timestamp >= startDate && $0.timestamp <= endDate }
             .sorted { $0.timestamp < $1.timestamp }
+
+        return CalendarFetchResult(
+            events: events,
+            source: .bundled,
+            lastUpdated: Date(),
+            isFallback: false
+        )
     }
 
     private func weeklyEvents() -> [EconomicEvent] {

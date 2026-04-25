@@ -45,9 +45,8 @@ struct RootTabView: View {
         }
         .animation(.easeInOut(duration: 0.2), value: navigationState.selectedTab)
         .preferredColorScheme(preferences.effectiveColorScheme)
-        .task {
-            guard viewModel.events.isEmpty else { return }
-            await viewModel.loadCurrentWeek()
+        .task(id: preferences.effectiveTimeZone.identifier) {
+            await viewModel.loadCurrentWeek(timeZone: preferences.effectiveTimeZone)
         }
         .onAppear {
             isShowingOnboarding = !preferences.hasCompletedOnboarding
@@ -87,6 +86,10 @@ struct RootTabView: View {
     }
 
     private var shouldSyncDefaultNotifications: Bool {
+        guard preferences.hasCompletedOnboarding else {
+            return false
+        }
+
         guard let visibleInterval = viewModel.visibleInterval else {
             return false
         }

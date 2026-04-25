@@ -1,5 +1,4 @@
 import SwiftUI
-import UserNotifications
 
 @MainActor
 struct SessionsKillzonesView: View {
@@ -22,8 +21,12 @@ struct SessionsKillzonesView: View {
                     )
 
                     TimelineView(.periodic(from: .now, by: 1)) { context in
-                        let sessionStates = sessionDefinitions.map { SessionState(definition: $0, now: context.date) }
-                        let overlapStates = overlapDefinitions.map { OverlapState(definition: $0, now: context.date) }
+                        let sessionStates = sessionDefinitions.map {
+                            SessionState(definition: $0, now: context.date, displayTimeZone: preferences.effectiveTimeZone)
+                        }
+                        let overlapStates = overlapDefinitions.map {
+                            OverlapState(definition: $0, now: context.date, displayTimeZone: preferences.effectiveTimeZone)
+                        }
 
                         VStack(alignment: .leading, spacing: TickrLayout.sectionSpacing) {
                             marketBoardCard(now: context.date)
@@ -37,7 +40,7 @@ struct SessionsKillzonesView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Text("Tickr")
+                Text("Session Watch")
                     .font(.system(size: 20, weight: .bold, design: .rounded))
                     .foregroundStyle(TickrPalette.text)
             }
@@ -54,7 +57,7 @@ struct SessionsKillzonesView: View {
             VStack(alignment: .leading, spacing: 18) {
                 boardHeaderText
 
-                MarketBoardPanel(now: now, events: viewModel.events)
+                MarketBoardPanel(now: now, events: viewModel.events, displayTimeZone: preferences.effectiveTimeZone)
             }
         }
         .padding(.top, 8)
@@ -259,16 +262,21 @@ struct SessionsKillzonesView: View {
 private struct MarketBoardPanel: View {
     let now: Date
     let events: [EconomicEvent]
+    let displayTimeZone: TimeZone
 
     @State private var markerDayFractionOverride: Double?
     @State private var markerDragStartFraction: Double?
 
     private let rows = MarketBoardDefinition.allCases
-    private let activityService: any MarketActivityService = EstimatedMarketActivityService()
+    private static let activityService: any MarketActivityService = EstimatedMarketActivityService()
 
     var body: some View {
-        let displayedDate = markerDayFractionOverride.map { SessionPresentation.date(for: $0, onSameDayAs: now) } ?? now
-        let activitySnapshot = activityService.snapshot(at: displayedDate, events: events)
+        let displayedDate = markerDayFractionOverride.map {
+            SessionPresentation.date(for: $0, onSameDayAs: now, displayTimeZone: displayTimeZone)
+        } ?? now
+        let boardStates = rows.map { MarketBoardState(definition: $0, now: displayedDate, displayTimeZone: displayTimeZone) }
+        let activitySnapshot = Self.activityService.snapshot(at: displayedDate, events: events)
+        let markerTimeLabel = SessionPresentation.markerTimeString(for: displayedDate, displayTimeZone: displayTimeZone)
 
         VStack(alignment: .leading, spacing: 14) {
             GeometryReader { proxy in
@@ -279,11 +287,11 @@ private struct MarketBoardPanel: View {
                 let volumeRowHeight: CGFloat = isCompact ? 110 : 118
                 let timelineWidth = max(proxy.size.width - labelWidth - spacing, 1)
                 let compactTimelineWidth = max(proxy.size.width - 32, 1)
-                let timelineRowCount = CGFloat(rows.count)
+                let timelineRowCount = CGFloat(boardStates.count)
                 let markerHeight = isCompact
                     ? proxy.size.height - rowHeight
                     : (rowHeight * timelineRowCount) + (8 * max(timelineRowCount - 1, 0)) + 8 + volumeRowHeight
-                let markerFraction = markerDayFractionOverride ?? SessionPresentation.dayFraction(for: now)
+                let markerFraction = markerDayFractionOverride ?? SessionPresentation.dayFraction(for: now, displayTimeZone: displayTimeZone)
                 let markerXPosition = (isCompact ? compactTimelineWidth : timelineWidth) * markerFraction
 
                 ZStack(alignment: .topLeading) {
@@ -294,9 +302,9 @@ private struct MarketBoardPanel: View {
                         if isCompact {
                             ZStack(alignment: .topLeading) {
                                 VStack(spacing: 8) {
-                                    ForEach(rows) { definition in
+                                    ForEach(boardStates) { state in
                                         CompactMarketTimelineRow(
-                                            state: MarketBoardState(definition: definition, now: displayedDate),
+                                            state: state,
                                             timelineWidth: compactTimelineWidth
                                         )
                                         .frame(height: rowHeight)
@@ -322,9 +330,9 @@ private struct MarketBoardPanel: View {
                         } else {
                             HStack(alignment: .top, spacing: spacing) {
                                 VStack(spacing: 8) {
-                                    ForEach(rows) { definition in
+                                    ForEach(boardStates) { state in
                                         MarketSessionSidebarCard(
-                                            state: MarketBoardState(definition: definition, now: displayedDate),
+                                            state: state,
                                             compact: false
                                         )
                                         .frame(height: rowHeight)
@@ -342,9 +350,9 @@ private struct MarketBoardPanel: View {
 
                                 ZStack(alignment: .topLeading) {
                                     VStack(spacing: 8) {
-                                        ForEach(rows) { definition in
+                                        ForEach(boardStates) { state in
                                             MarketSessionTimelineRow(
-                                                state: MarketBoardState(definition: definition, now: displayedDate),
+                                                state: state,
                                                 timelineWidth: timelineWidth,
                                                 compact: false
                                             )
@@ -379,18 +387,13 @@ private struct MarketBoardPanel: View {
         }
     }
 
-    private var markerTimeLabel: String {
-        let displayedDate = markerDayFractionOverride.map { SessionPresentation.date(for: $0, onSameDayAs: now) } ?? now
-        return SessionPresentation.markerTimeString(for: displayedDate)
-    }
-
     private func markerDragGesture(timelineWidth: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
                 let clampedTimelineWidth = max(timelineWidth, 1)
                 let startFraction = markerDragStartFraction
                     ?? markerDayFractionOverride
-                    ?? SessionPresentation.dayFraction(for: now)
+                    ?? SessionPresentation.dayFraction(for: now, displayTimeZone: displayTimeZone)
 
                 if markerDragStartFraction == nil {
                     markerDragStartFraction = startFraction
@@ -409,7 +412,7 @@ private struct MarketBoardPanel: View {
     private func snappedMarkerFraction(for fraction: Double, timelineWidth: CGFloat) -> Double {
         let clampedFraction = min(max(fraction, 0), 1)
         let snapThreshold = 4 / timelineWidth
-        let snapFractions = SessionPresentation.marketBoundaryFractions(onSameDayAs: now)
+        let snapFractions = SessionPresentation.marketBoundaryFractions(onSameDayAs: now, displayTimeZone: displayTimeZone)
 
         guard let nearestBoundary = snapFractions.min(by: {
             abs($0 - clampedFraction) < abs($1 - clampedFraction)
@@ -431,94 +434,6 @@ private struct MarketBoardPanel: View {
     }
 }
 
-enum MarketBoardDefinition: CaseIterable, Identifiable {
-    case sydney
-    case tokyo
-    case london
-    case newYork
-
-    var id: String { cityName }
-
-    var cityName: String {
-        switch self {
-        case .sydney:
-            "Sydney"
-        case .tokyo:
-            "Tokyo"
-        case .london:
-            "London"
-        case .newYork:
-            "New York"
-        }
-    }
-
-    var flag: String {
-        switch self {
-        case .sydney:
-            "🇦🇺"
-        case .tokyo:
-            "🇯🇵"
-        case .london:
-            "🇬🇧"
-        case .newYork:
-            "🇺🇸"
-        }
-    }
-
-    var timeZone: TimeZone {
-        switch self {
-        case .sydney:
-            TimeZone(identifier: "Australia/Sydney") ?? .current
-        case .tokyo:
-            TimeZone(identifier: "Asia/Tokyo") ?? .current
-        case .london:
-            TimeZone(identifier: "Europe/London") ?? .current
-        case .newYork:
-            TimeZone(identifier: "America/New_York") ?? .current
-        }
-    }
-
-    var openHour: Int {
-        switch self {
-        case .sydney:
-            7
-        case .tokyo:
-            9
-        case .london:
-            8
-        case .newYork:
-            8
-        }
-    }
-
-    var closeHour: Int {
-        switch self {
-        case .sydney:
-            16
-        case .tokyo:
-            18
-        case .london:
-            17
-        case .newYork:
-            17
-        }
-    }
-
-    var color: Color {
-        switch self {
-        case .sydney:
-            Color(red: 0.26, green: 0.39, blue: 0.83)
-        case .tokyo:
-            Color(red: 0.64, green: 0.13, blue: 0.57)
-        case .london:
-            Color(red: 0.27, green: 0.54, blue: 0.89)
-        case .newYork:
-            Color(red: 0.43, green: 0.78, blue: 0.22)
-        }
-    }
-
-}
-
 private struct MarketBoardState: Identifiable {
     let definition: MarketBoardDefinition
     let localNow: String
@@ -530,7 +445,7 @@ private struct MarketBoardState: Identifiable {
 
     var id: String { definition.id }
 
-    init(definition: MarketBoardDefinition, now: Date) {
+    init(definition: MarketBoardDefinition, now: Date, displayTimeZone: TimeZone) {
         self.definition = definition
 
         let intervals = SessionPresentation.marketIntervalsAroundNow(for: definition, now: now)
@@ -545,7 +460,7 @@ private struct MarketBoardState: Identifiable {
             : "Closes in \(SessionPresentation.relativeCountdown(to: referenceInterval.end, from: now))"
         self.transitionStatusText = active == nil ? "Closed" : "Open"
         self.transitionStatusColor = active == nil ? Color.red : TickrPalette.success
-        self.timelineSegments = SessionPresentation.timelineSegments(for: definition, dayContaining: now)
+        self.timelineSegments = SessionPresentation.timelineSegments(for: definition, dayContaining: now, displayTimeZone: displayTimeZone)
     }
 }
 
@@ -973,89 +888,6 @@ private struct VolumeProfileWave: View {
     }
 }
 
-enum ForexSessionDefinition: CaseIterable, Identifiable {
-    case asian
-    case london
-    case newYork
-
-    var id: String { shortTitle }
-
-    var title: String {
-        switch self {
-        case .asian:
-            "Sydney/Tokyo"
-        case .london:
-            "London"
-        case .newYork:
-            "New York"
-        }
-    }
-
-    var shortTitle: String {
-        switch self {
-        case .asian:
-            "Asian"
-        case .london:
-            "London"
-        case .newYork:
-            "New York"
-        }
-    }
-
-    var startTimeZone: TimeZone {
-        switch self {
-        case .asian:
-            TimeZone(identifier: "Australia/Sydney") ?? .current
-        case .london:
-            TimeZone(identifier: "Europe/London") ?? .current
-        case .newYork:
-            TimeZone(identifier: "America/New_York") ?? .current
-        }
-    }
-
-    var endTimeZone: TimeZone {
-        switch self {
-        case .asian:
-            TimeZone(identifier: "Asia/Tokyo") ?? .current
-        case .london:
-            TimeZone(identifier: "Europe/London") ?? .current
-        case .newYork:
-            TimeZone(identifier: "America/New_York") ?? .current
-        }
-    }
-
-    var startHour: Int {
-        switch self {
-        case .asian: 7
-        case .london: 8
-        case .newYork: 8
-        }
-    }
-
-    var startMinute: Int { 0 }
-
-    var endHour: Int {
-        switch self {
-        case .asian: 18
-        case .london: 17
-        case .newYork: 17
-        }
-    }
-
-    var endMinute: Int { 0 }
-
-    var color: Color {
-        switch self {
-        case .asian:
-            Color(red: 0.15, green: 0.49, blue: 0.69)
-        case .london:
-            TickrPalette.accent
-        case .newYork:
-            Color(red: 0.72, green: 0.32, blue: 0.20)
-        }
-    }
-}
-
 private struct SessionState: Identifiable {
     let definition: ForexSessionDefinition
     let activeInterval: DateInterval
@@ -1068,7 +900,7 @@ private struct SessionState: Identifiable {
 
     var id: String { definition.id }
 
-    init(definition: ForexSessionDefinition, now: Date) {
+    init(definition: ForexSessionDefinition, now: Date, displayTimeZone: TimeZone) {
         self.definition = definition
 
         let intervals = SessionPresentation.intervalsAroundNow(for: definition, now: now)
@@ -1079,62 +911,10 @@ private struct SessionState: Identifiable {
         self.activeInterval = referenceInterval
         self.nextOpenDate = nextOpen
         self.isActive = active != nil
-        self.timelineSegments = SessionPresentation.timelineSegments(for: definition, dayContaining: now)
-        self.localWindowLabel = SessionPresentation.localWindowLabel(for: definition, referenceDate: now)
+        self.timelineSegments = SessionPresentation.timelineSegments(for: definition, dayContaining: now, displayTimeZone: displayTimeZone)
+        self.localWindowLabel = SessionPresentation.localWindowLabel(for: definition, referenceDate: now, displayTimeZone: displayTimeZone)
         self.openRelativeLabel = SessionPresentation.relativeCountdown(to: nextOpen, from: now)
         self.closeRelativeLabel = SessionPresentation.relativeCountdown(to: referenceInterval.end, from: now)
-    }
-}
-
-enum ForexOverlapDefinition: CaseIterable, Identifiable {
-    case asianLondon
-    case londonNewYork
-
-    var id: String { shortTitle }
-
-    var title: String {
-        switch self {
-        case .asianLondon:
-            "Asian/London Overlap"
-        case .londonNewYork:
-            "London/New York Overlap"
-        }
-    }
-
-    var shortTitle: String {
-        switch self {
-        case .asianLondon:
-            "Asia/London"
-        case .londonNewYork:
-            "London/NY"
-        }
-    }
-
-    var note: String {
-        switch self {
-        case .asianLondon:
-            "Early European liquidity comes online while Asia is still active."
-        case .londonNewYork:
-            "Highest-volume period for most forex pairs."
-        }
-    }
-
-    var sessions: (ForexSessionDefinition, ForexSessionDefinition) {
-        switch self {
-        case .asianLondon:
-            (.asian, .london)
-        case .londonNewYork:
-            (.london, .newYork)
-        }
-    }
-
-    var color: Color {
-        switch self {
-        case .asianLondon:
-            Color(red: 0.31, green: 0.55, blue: 0.73)
-        case .londonNewYork:
-            Color(red: 0.87, green: 0.58, blue: 0.15)
-        }
     }
 }
 
@@ -1149,7 +929,7 @@ private struct OverlapState: Identifiable {
 
     var id: String { definition.id }
 
-    init(definition: ForexOverlapDefinition, now: Date) {
+    init(definition: ForexOverlapDefinition, now: Date, displayTimeZone: TimeZone) {
         self.definition = definition
         let intervals = SessionPresentation.overlapIntervalsAroundNow(for: definition, now: now)
         let active = intervals.first(where: { $0.contains(now) })
@@ -1159,485 +939,9 @@ private struct OverlapState: Identifiable {
         self.activeInterval = referenceInterval
         self.nextStartDate = nextStart
         self.isActive = active != nil
-        self.localWindowLabel = SessionPresentation.localWindowLabel(for: definition, referenceDate: now)
+        self.localWindowLabel = SessionPresentation.localWindowLabel(for: definition, referenceDate: now, displayTimeZone: displayTimeZone)
         self.startRelativeLabel = SessionPresentation.relativeCountdown(to: nextStart, from: now)
         self.endRelativeLabel = SessionPresentation.relativeCountdown(to: referenceInterval.end, from: now)
-    }
-}
-
-enum SessionPresentation {
-    static let newYorkTimeZone = TimeZone(identifier: "America/New_York") ?? .current
-
-    static let utcCalendar: Calendar = {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
-        return calendar
-    }()
-
-    static let newYorkCalendar: Calendar = {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = newYorkTimeZone
-        return calendar
-    }()
-
-    static let localCalendar: Calendar = {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .current
-        return calendar
-    }()
-
-    static func intervalsAroundNow(for definition: ForexSessionDefinition, now: Date) -> [DateInterval] {
-        (-2...3).compactMap { sessionInterval(for: definition, around: now, dayOffset: $0) }
-            .filter { $0.end > now.addingTimeInterval(-24 * 60 * 60) }
-            .sorted { $0.start < $1.start }
-    }
-
-    static func nextInterval(for definition: ForexSessionDefinition, after date: Date) -> DateInterval {
-        intervalsAroundNow(for: definition, now: date)
-            .first(where: { $0.start > date })
-            ?? sessionInterval(for: definition, around: date, dayOffset: 4)
-            ?? DateInterval(start: date, duration: 60)
-    }
-
-    static func marketIntervalsAroundNow(for definition: MarketBoardDefinition, now: Date) -> [DateInterval] {
-        (-2...3).compactMap { marketInterval(for: definition, around: now, dayOffset: $0) }
-            .filter { $0.end > now.addingTimeInterval(-24 * 60 * 60) }
-            .sorted { $0.start < $1.start }
-    }
-
-    static func nextMarketInterval(for definition: MarketBoardDefinition, after date: Date) -> DateInterval {
-        marketIntervalsAroundNow(for: definition, now: date)
-            .first(where: { $0.start > date })
-            ?? marketInterval(for: definition, around: date, dayOffset: 4)
-            ?? DateInterval(start: date, duration: 60)
-    }
-
-    static func overlapIntervalsAroundNow(for definition: ForexOverlapDefinition, now: Date) -> [DateInterval] {
-        let firstSession = intervalsAroundNow(for: definition.sessions.0, now: now)
-        let secondSession = intervalsAroundNow(for: definition.sessions.1, now: now)
-
-        let overlaps = firstSession.flatMap { first in
-            secondSession.compactMap { second in
-                first.intersection(with: second)
-            }
-        }
-
-        return overlaps
-            .filter { $0.duration > 0 }
-            .sorted { $0.start < $1.start }
-    }
-
-    static func nextOverlapInterval(for definition: ForexOverlapDefinition, after date: Date) -> DateInterval {
-        overlapIntervalsAroundNow(for: definition, now: date)
-            .first(where: { $0.start > date })
-            ?? DateInterval(start: nextForexMarketOpen(after: date), duration: 60)
-    }
-
-    static func isForexMarketOpen(at date: Date) -> Bool {
-        let components = newYorkCalendar.dateComponents([.weekday, .hour, .minute], from: date)
-        let weekday = components.weekday ?? 1
-        let minutes = (components.hour ?? 0) * 60 + (components.minute ?? 0)
-
-        if weekday == 6 {
-            return minutes < 17 * 60
-        }
-
-        if weekday == 7 {
-            return false
-        }
-
-        if weekday == 1 {
-            return minutes >= 17 * 60
-        }
-
-        return true
-    }
-
-    static func nextForexMarketOpen(after date: Date) -> Date {
-        if isForexMarketOpen(at: date) {
-            return date
-        }
-
-        let components = newYorkCalendar.dateComponents([.weekday], from: date)
-        let weekday = components.weekday ?? 1
-        let startOfDay = newYorkCalendar.startOfDay(for: date)
-
-        switch weekday {
-        case 6:
-            let sunday = newYorkCalendar.date(byAdding: .day, value: 2, to: startOfDay) ?? startOfDay
-            return newYorkCalendar.date(bySettingHour: 17, minute: 0, second: 0, of: sunday) ?? date
-        case 7:
-            let sunday = startOfDay
-            return newYorkCalendar.date(bySettingHour: 17, minute: 0, second: 0, of: sunday) ?? date
-        case 1:
-            return newYorkCalendar.date(bySettingHour: 17, minute: 0, second: 0, of: startOfDay) ?? date
-        default:
-            return date
-        }
-    }
-
-    static func localWindowLabel(for definition: ForexSessionDefinition, referenceDate: Date) -> String {
-        let interval = nextRelevantInterval(for: definition, referenceDate: referenceDate)
-        return "\(localTime(interval.start)) - \(localTime(interval.end))"
-    }
-
-    static func localWindowLabel(for definition: ForexOverlapDefinition, referenceDate: Date) -> String {
-        let interval = overlapIntervalsAroundNow(for: definition, now: referenceDate).first(where: { $0.contains(referenceDate) || $0.start > referenceDate })
-            ?? nextOverlapInterval(for: definition, after: referenceDate)
-        return "\(localTime(interval.start)) - \(localTime(interval.end))"
-    }
-
-    static func timelineSegments(for definition: ForexSessionDefinition, dayContaining date: Date) -> [TimelineSegment] {
-        let localDayInterval = localDayInterval(containing: date)
-        let localDayStart = localDayInterval.start
-        let localDayDuration = localDayInterval.duration
-
-        return intervalsAroundNow(for: definition, now: date).compactMap { interval in
-            guard let intersection = interval.intersection(with: localDayInterval) else {
-                return nil
-            }
-
-            let startFraction = intersection.start.timeIntervalSince(localDayStart) / localDayDuration
-            let lengthFraction = intersection.duration / localDayDuration
-            return TimelineSegment(start: startFraction, length: lengthFraction)
-        }
-    }
-
-    static func timelineSegments(for definition: MarketBoardDefinition, dayContaining date: Date) -> [TimelineSegment] {
-        let localDayInterval = localDayInterval(containing: date)
-        let localDayStart = localDayInterval.start
-        let localDayDuration = localDayInterval.duration
-
-        return marketIntervalsAroundNow(for: definition, now: date).compactMap { interval in
-            guard let intersection = interval.intersection(with: localDayInterval) else {
-                return nil
-            }
-
-            let startFraction = intersection.start.timeIntervalSince(localDayStart) / localDayDuration
-            let lengthFraction = intersection.duration / localDayDuration
-            return TimelineSegment(start: startFraction, length: lengthFraction)
-        }
-    }
-
-    static func relativeCountdown(to date: Date, from now: Date) -> String {
-        let seconds = max(Int(date.timeIntervalSince(now)), 0)
-        let hours = seconds / 3600
-        let minutes = (seconds % 3600) / 60
-        if hours == 0 {
-            return "\(minutes)m"
-        }
-        return "\(hours)h \(minutes)m"
-    }
-
-    static func timeString(in timeZone: TimeZone, for date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.timeZone = timeZone
-        formatter.dateFormat = "h:mm a"
-        formatter.amSymbol = "am"
-        formatter.pmSymbol = "pm"
-        return formatter.string(from: date)
-    }
-
-    static func dateString(in timeZone: TimeZone, for date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.timeZone = timeZone
-        formatter.dateFormat = "EEE MMM d"
-        return formatter.string(from: date)
-    }
-
-    static func zoneLabel(for timeZone: TimeZone) -> String {
-        timeZone.localizedName(for: .shortStandard, locale: .current) ?? timeZone.identifier
-    }
-
-    static func dayFraction(for date: Date) -> Double {
-        let dayInterval = localDayInterval(containing: date)
-        let elapsed = date.timeIntervalSince(dayInterval.start)
-        return min(max(elapsed / dayInterval.duration, 0), 1)
-    }
-
-    static func date(for dayFraction: Double, onSameDayAs referenceDate: Date) -> Date {
-        let dayInterval = localDayInterval(containing: referenceDate)
-        let clampedFraction = min(max(dayFraction, 0), 1)
-        return dayInterval.start.addingTimeInterval(dayInterval.duration * clampedFraction)
-    }
-
-    static func markerTimeString(for date: Date) -> String {
-        EventDateFormatter.timeString(from: date, useUTC: false, use24HourTime: false)
-    }
-
-    static func marketBoundaryFractions(onSameDayAs referenceDate: Date) -> [Double] {
-        let localDayInterval = localDayInterval(containing: referenceDate)
-        let localDayStart = localDayInterval.start
-        let localDayDuration = localDayInterval.duration
-        var fractions: [Double] = []
-
-        for definition in MarketBoardDefinition.allCases {
-            let intervals = marketIntervalsAroundNow(for: definition, now: referenceDate)
-            for interval in intervals {
-                let boundaries = [interval.start, interval.end]
-                for boundary in boundaries where localDayInterval.contains(boundary) {
-                    fractions.append(boundary.timeIntervalSince(localDayStart) / localDayDuration)
-                }
-            }
-        }
-
-        return fractions
-    }
-
-    static func hourLabel(for hour: Int) -> String {
-        let normalizedHour = hour % 24
-        switch normalizedHour {
-        case 0:
-            return "12"
-        case 1...12:
-            return "\(normalizedHour)"
-        default:
-            return "\(normalizedHour - 12)"
-        }
-    }
-
-    static func currentLocalHour(on date: Date) -> Int {
-        localCalendar.component(.hour, from: date)
-    }
-
-    private static func localDayInterval(containing date: Date) -> DateInterval {
-        localCalendar.dateInterval(of: .day, for: date)
-            ?? DateInterval(start: localCalendar.startOfDay(for: date), duration: 24 * 60 * 60)
-    }
-
-    private static func localTime(_ date: Date) -> String {
-        EventDateFormatter.timeString(from: date, useUTC: false, use24HourTime: false)
-    }
-
-    private static func nextRelevantInterval(for definition: ForexSessionDefinition, referenceDate: Date) -> DateInterval {
-        intervalsAroundNow(for: definition, now: referenceDate)
-            .first(where: { $0.contains(referenceDate) || $0.start > referenceDate })
-            ?? nextInterval(for: definition, after: referenceDate)
-    }
-
-    private static func marketInterval(for definition: MarketBoardDefinition, around date: Date, dayOffset: Int) -> DateInterval? {
-        guard
-            let start = zonedDate(
-                in: definition.timeZone,
-                relativeTo: date,
-                dayOffset: dayOffset,
-                hour: definition.openHour,
-                minute: 0
-            ),
-            let end = zonedDate(
-                in: definition.timeZone,
-                relativeTo: date,
-                dayOffset: dayOffset,
-                hour: definition.closeHour,
-                minute: 0
-            )
-        else {
-            return nil
-        }
-
-        let interval = DateInterval(start: start, end: max(end, start.addingTimeInterval(60)))
-        return clipToForexWeek(interval)
-    }
-
-    private static func sessionInterval(for definition: ForexSessionDefinition, around date: Date, dayOffset: Int) -> DateInterval? {
-        guard
-            let start = zonedDate(
-                in: definition.startTimeZone,
-                relativeTo: date,
-                dayOffset: dayOffset,
-                hour: definition.startHour,
-                minute: definition.startMinute
-            ),
-            var end = zonedDate(
-                in: definition.endTimeZone,
-                relativeTo: date,
-                dayOffset: dayOffset,
-                hour: definition.endHour,
-                minute: definition.endMinute
-            )
-        else {
-            return nil
-        }
-
-        if end <= start {
-            end = Calendar(identifier: .gregorian).date(byAdding: .day, value: 1, to: end) ?? end
-        }
-
-        let interval = DateInterval(start: start, end: end)
-        return clipToForexWeek(interval)
-    }
-
-    private static func zonedDate(in timeZone: TimeZone, relativeTo date: Date, dayOffset: Int, hour: Int, minute: Int) -> Date? {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone
-        let startOfDay = calendar.startOfDay(for: date)
-        guard let shiftedDay = calendar.date(byAdding: .day, value: dayOffset, to: startOfDay) else {
-            return nil
-        }
-
-        return calendar.date(bySettingHour: hour, minute: minute, second: 0, of: shiftedDay)
-    }
-
-    private static func clipToForexWeek(_ interval: DateInterval) -> DateInterval? {
-        let openIntervals = forexOpenIntervals(around: interval.start)
-        for openInterval in openIntervals {
-            if let intersection = interval.intersection(with: openInterval), intersection.duration > 0 {
-                return intersection
-            }
-        }
-
-        return nil
-    }
-
-    private static func forexOpenIntervals(around date: Date) -> [DateInterval] {
-        (-1...2).compactMap { weekOffset in
-            let weekStart = startOfWeekInNewYork(for: date, weekOffset: weekOffset)
-            guard
-                let sundayOpen = newYorkCalendar.date(bySettingHour: 17, minute: 0, second: 0, of: weekStart),
-                let fridayClose = newYorkCalendar.date(byAdding: .day, value: 5, to: sundayOpen)
-            else {
-                return nil
-            }
-
-            return DateInterval(start: sundayOpen, end: fridayClose)
-        }
-    }
-
-    private static func startOfWeekInNewYork(for date: Date, weekOffset: Int) -> Date {
-        let dayStart = newYorkCalendar.startOfDay(for: date)
-        let weekday = newYorkCalendar.component(.weekday, from: dayStart)
-        let daysToSunday = weekday - 1
-        let currentSunday = newYorkCalendar.date(byAdding: .day, value: -daysToSunday, to: dayStart) ?? dayStart
-        return newYorkCalendar.date(byAdding: .day, value: weekOffset * 7, to: currentSunday) ?? currentSunday
-    }
-}
-
-struct TimelineSegment {
-    let start: Double
-    let length: Double
-}
-
-enum SessionNotificationStore {
-    private static let prefix = "tickr.sessions."
-
-    static func resyncEnabledNotifications(preferences: UserPreferences) async {
-        let existingIdentifiers = await pendingIdentifiers()
-        let sessionIdentifiers = existingIdentifiers.filter { $0.hasPrefix(prefix) }
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: sessionIdentifiers)
-
-        if preferences.asianSessionNotificationsEnabled {
-            try? await scheduleSessionNotification(for: .asian, preferences: preferences)
-        }
-        if preferences.londonSessionNotificationsEnabled {
-            try? await scheduleSessionNotification(for: .london, preferences: preferences)
-        }
-        if preferences.newYorkSessionNotificationsEnabled {
-            try? await scheduleSessionNotification(for: .newYork, preferences: preferences)
-        }
-        if preferences.asianLondonOverlapNotificationsEnabled {
-            try? await scheduleOverlapNotification(for: .asianLondon, preferences: preferences)
-        }
-        if preferences.londonNewYorkOverlapNotificationsEnabled {
-            try? await scheduleOverlapNotification(for: .londonNewYork, preferences: preferences)
-        }
-    }
-
-    static func scheduleSessionNotification(for definition: ForexSessionDefinition, preferences: UserPreferences) async throws {
-        let nextStart = SessionPresentation.nextInterval(for: definition, after: Date()).start
-        try await scheduleNotification(
-            identifier: prefix + "session." + definition.id,
-            title: "\(definition.title) Session",
-            body: "\(definition.title) opens in 15 minutes.",
-            fireDate: nextStart.addingTimeInterval(-15 * 60),
-            preferences: preferences
-        )
-    }
-
-    static func removeSessionNotification(for definition: ForexSessionDefinition) async {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [prefix + "session." + definition.id])
-    }
-
-    static func scheduleOverlapNotification(for definition: ForexOverlapDefinition, preferences: UserPreferences) async throws {
-        let nextStart = SessionPresentation.nextOverlapInterval(for: definition, after: Date()).start
-        try await scheduleNotification(
-            identifier: prefix + "overlap." + definition.id,
-            title: definition.title,
-            body: "\(definition.title) starts in 15 minutes.",
-            fireDate: nextStart.addingTimeInterval(-15 * 60),
-            preferences: preferences
-        )
-    }
-
-    static func removeOverlapNotification(for definition: ForexOverlapDefinition) async {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [prefix + "overlap." + definition.id])
-    }
-
-    private static func scheduleNotification(identifier: String, title: String, body: String, fireDate: Date, preferences: UserPreferences) async throws {
-        guard fireDate > Date() else {
-            throw SessionNotificationError.notificationWindowPassed
-        }
-
-        guard !preferences.isWithinQuietHours(on: fireDate) else {
-            throw SessionNotificationError.quietHoursBlocked
-        }
-
-        let granted = try await requestAuthorization()
-        guard granted else {
-            throw SessionNotificationError.authorizationDenied
-        }
-
-        let center = UNUserNotificationCenter.current()
-        center.removePendingNotificationRequests(withIdentifiers: [identifier])
-
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = body
-        content.sound = preferences.notificationSoundOption.unNotificationSound
-
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(fireDate.timeIntervalSinceNow, 1), repeats: false)
-        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
-        try await add(request, center: center)
-    }
-
-    private static func requestAuthorization() async throws -> Bool {
-        try await NotificationAuthorizationStore.requestAuthorizationIfNeeded()
-    }
-
-    private static func add(_ request: UNNotificationRequest, center: UNUserNotificationCenter) async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            center.add(request) { error in
-                if let error {
-                    continuation.resume(throwing: error)
-                } else {
-                    continuation.resume(returning: ())
-                }
-            }
-        }
-    }
-
-    private static func pendingIdentifiers() async -> [String] {
-        await withCheckedContinuation { continuation in
-            UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
-                continuation.resume(returning: requests.map(\.identifier))
-            }
-        }
-    }
-}
-
-private enum SessionNotificationError: LocalizedError {
-    case authorizationDenied
-    case notificationWindowPassed
-    case quietHoursBlocked
-
-    var errorDescription: String? {
-        switch self {
-        case .authorizationDenied:
-            "Notifications are disabled for Tickr."
-        case .notificationWindowPassed:
-            "The next 15-minute warning for that session has already passed."
-        case .quietHoursBlocked:
-            "That alert falls within your quiet hours."
-        }
     }
 }
 

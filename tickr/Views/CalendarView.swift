@@ -19,18 +19,22 @@ struct CalendarView: View {
 
     private var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .current
+        calendar.timeZone = displayTimeZone
         calendar.firstWeekday = 2
         calendar.minimumDaysInFirstWeek = 4
         return calendar
     }
 
+    private var displayTimeZone: TimeZone {
+        preferences.effectiveTimeZone
+    }
+
     private var weekInterval: DateInterval {
-        Calendar.tradingWeekInterval(referenceDate: Date(), weekOffset: weekOffset)
+        Calendar.tradingWeekInterval(referenceDate: Date(), weekOffset: weekOffset, timeZone: displayTimeZone)
     }
 
     private var weekdaySections: [DaySection] {
-        let weekdayDates = Calendar.tradingWeekdays(referenceDate: Date(), weekOffset: weekOffset)
+        let weekdayDates = Calendar.tradingWeekdays(referenceDate: Date(), weekOffset: weekOffset, timeZone: displayTimeZone)
         let groupedEvents = Dictionary(grouping: filteredEvents) { event in
             calendar.startOfDay(for: event.timestamp)
         }
@@ -57,7 +61,7 @@ struct CalendarView: View {
             let matchesCategory = preferences.selectedCategory == nil || event.category == preferences.selectedCategory
             let matchesWatchedPairs = !preferences.showOnlyWatchedPairs
                 || preferences.watchedPairSymbols.isEmpty
-                || !Set(event.relatedPairs).isDisjoint(with: preferences.watchedPairSymbols)
+                || preferences.matchesWatchedPair(event)
 
             return matchesImpact && matchesCurrency && matchesCountry && matchesCategory && matchesWatchedPairs
         }
@@ -136,16 +140,13 @@ struct CalendarView: View {
     }
 
     private var weekTitle: String {
-        let formatter = DateFormatter()
-        formatter.calendar = calendar
-        formatter.timeZone = .current
-        formatter.dateFormat = "MMM d"
-
         guard let friday = calendar.date(byAdding: .day, value: 4, to: weekInterval.start) else {
-            return formatter.string(from: weekInterval.start)
+            return EventDateFormatter.monthDayString(from: weekInterval.start, timeZone: displayTimeZone)
         }
 
-        return "\(formatter.string(from: weekInterval.start)) - \(formatter.string(from: friday))"
+        let start = EventDateFormatter.monthDayString(from: weekInterval.start, timeZone: displayTimeZone)
+        let end = EventDateFormatter.monthDayString(from: friday, timeZone: displayTimeZone)
+        return "\(start) - \(end)"
     }
 
     private var emptyState: CalendarEmptyState? {
@@ -180,8 +181,10 @@ struct CalendarView: View {
                         header
                         filterControls
 
+                        freshnessBanner
+
                         if let lastRefreshDate = viewModel.lastRefreshDate {
-                            Text("Updated \(RelativeDateTimeFormatter().localizedString(for: lastRefreshDate, relativeTo: Date()))")
+                            Text(lastUpdatedLabel(for: lastRefreshDate))
                                 .font(.caption)
                                 .foregroundStyle(TickrPalette.muted)
                         }
@@ -265,6 +268,10 @@ struct CalendarView: View {
             .task(id: weekOffset) {
                 await loadVisibleWeek(using: proxy)
             }
+            .task(id: displayTimeZone.identifier) {
+                collapsedDays.removeAll()
+                await loadVisibleWeek(using: proxy)
+            }
             .task {
                 scheduledNotificationEventIDs = await CalendarNotificationStore.scheduledEventIDs()
             }
@@ -334,6 +341,54 @@ struct CalendarView: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private var freshnessBanner: some View {
+        if let message = freshnessBannerMessage {
+            TickrCard {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "wifi.slash")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.orange.opacity(0.9))
+
+                    Text(message)
+                        .font(.subheadline)
+                        .foregroundStyle(TickrPalette.text)
+                }
+            }
+        }
+    }
+
+    private var freshnessBannerMessage: String? {
+        guard viewModel.isShowingFallbackData else {
+            return nil
+        }
+
+        switch viewModel.dataSource {
+        case .cache:
+            return "Offline or unable to refresh. Showing cached calendar data that may be outdated."
+        case .bundled:
+            return "Offline or unable to refresh. Showing bundled calendar data that may be outdated."
+        case .remote, nil:
+            return nil
+        }
+    }
+
+    private func lastUpdatedLabel(for date: Date) -> String {
+        let prefix: String
+        switch viewModel.dataSource {
+        case .remote:
+            prefix = "Feed updated"
+        case .cache:
+            prefix = viewModel.isShowingFallbackData ? "Cached feed from" : "Feed updated"
+        case .bundled:
+            prefix = "Bundled feed from"
+        case nil:
+            prefix = "Updated"
+        }
+
+        return "\(prefix) \(EventDateFormatter.relativeString(for: date))"
     }
 
     private var filterControls: some View {
@@ -474,11 +529,7 @@ struct CalendarView: View {
     }
 
     private func dayHeaderTitle(for day: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.calendar = calendar
-        formatter.timeZone = .current
-        formatter.dateFormat = "EEEE, MMM d"
-        return formatter.string(from: day)
+        EventDateFormatter.dayString(from: day, timeZone: displayTimeZone)
     }
 
     private func toggleSection(_ day: Date) {
@@ -498,7 +549,7 @@ struct CalendarView: View {
     }
 
     private func loadVisibleWeek(using proxy: ScrollViewProxy) async {
-        await viewModel.loadWeek(referenceDate: Date(), weekOffset: weekOffset)
+        await viewModel.loadWeek(referenceDate: Date(), weekOffset: weekOffset, timeZone: displayTimeZone)
 
         guard weekOffset == 0 else {
             return
@@ -583,7 +634,7 @@ struct CalendarView: View {
         }
 
         Task {
-            await viewModel.loadCurrentWeek()
+            await viewModel.loadCurrentWeek(timeZone: displayTimeZone)
             if let matchedEvent = viewModel.events.first(where: { $0.id == eventID }) {
                 navigationState.selectedTab = .calendar
                 routedEvent = matchedEvent
@@ -604,7 +655,7 @@ private struct EconomicEventRow: View {
                     Text(
                         EventDateFormatter.timeString(
                             from: event.timestamp,
-                            useUTC: false,
+                            timeZone: preferences.effectiveTimeZone,
                             use24HourTime: preferences.use24HourTime
                         )
                     )
@@ -707,13 +758,14 @@ private struct EconomicEventDetailView: View {
     @State private var shareImage: ShareableImage?
 
     private var eventDateString: String {
-        let day = EventDateFormatter.dayString(from: event.timestamp, useUTC: false)
+        let timeZone = preferences.effectiveTimeZone
+        let day = EventDateFormatter.dayString(from: event.timestamp, timeZone: timeZone)
         let time = EventDateFormatter.timeString(
             from: event.timestamp,
-            useUTC: false,
+            timeZone: timeZone,
             use24HourTime: preferences.use24HourTime
         )
-        let timezoneLabel = TimeZone.current.localizedName(for: .shortStandard, locale: .current) ?? "Local"
+        let timezoneLabel = EventDateFormatter.timeZoneLabel(for: timeZone)
         return "\(day) at \(time) \(timezoneLabel)"
     }
 
@@ -722,7 +774,7 @@ private struct EconomicEventDetailView: View {
     }
 
     private var sourceAttribution: String {
-        "Source: Tickr calendar feed"
+        "Source: Session Watch calendar feed"
     }
 
     var body: some View {
@@ -1258,7 +1310,7 @@ private struct EventShareCard: View {
             TickrPalette.backgroundTop
 
             VStack(alignment: .leading, spacing: 20) {
-                Text("Tickr")
+                Text("Session Watch")
                     .font(.caption.weight(.semibold))
                     .tracking(1.2)
                     .foregroundStyle(TickrPalette.muted)
@@ -1273,11 +1325,11 @@ private struct EventShareCard: View {
                     TickrPill(text: categoryDisplayName)
                 }
 
-                Text(EventDateFormatter.dayString(from: event.timestamp, useUTC: false))
+                Text(EventDateFormatter.dayString(from: event.timestamp, timeZone: preferences.effectiveTimeZone))
                     .font(.headline)
                     .foregroundStyle(TickrPalette.text)
 
-                Text(EventDateFormatter.timeString(from: event.timestamp, useUTC: false, use24HourTime: preferences.use24HourTime))
+                Text(EventDateFormatter.timeString(from: event.timestamp, timeZone: preferences.effectiveTimeZone, use24HourTime: preferences.use24HourTime))
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(TickrPalette.accent)
 
@@ -1414,6 +1466,10 @@ enum CalendarNotificationStore {
     }
 
     static func syncDefaultNotifications(for events: [EconomicEvent], preferences: UserPreferences) async {
+        guard await NotificationAuthorizationStore.canScheduleNotificationsWithoutPrompt() else {
+            return
+        }
+
         let requests = await pendingRequests()
         let existingDefaultIdentifiers = requests
             .map(\.identifier)
@@ -1434,13 +1490,6 @@ enum CalendarNotificationStore {
         }
 
         guard !upcomingSchedules.isEmpty else {
-            return
-        }
-
-        do {
-            let granted = try await requestAuthorization()
-            guard granted else { return }
-        } catch {
             return
         }
 
@@ -1591,7 +1640,7 @@ enum CalendarNotificationStore {
         let center = UNUserNotificationCenter.current()
         let sorted = schedules.sorted { $0.event.timestamp < $1.event.timestamp }
         let content = UNMutableNotificationContent()
-        content.title = groupedTitle(for: sorted)
+        content.title = groupedTitle(for: sorted, preferences: preferences)
         content.body = groupedBody(for: sorted)
         content.sound = preferences.notificationSoundOption.unNotificationSound
         content.threadIdentifier = "tickr.default.group"
@@ -1622,11 +1671,11 @@ enum CalendarNotificationStore {
         return "Your \(pairList) pairs may be affected. Forecast: \(forecast) | Previous: \(previous)"
     }
 
-    private static func groupedTitle(for schedules: [EventNotificationSchedule]) -> String {
+    private static func groupedTitle(for schedules: [EventNotificationSchedule], preferences: UserPreferences) -> String {
         let highImpactCount = schedules.filter { $0.event.impactLevel == .high }.count
         let titlePrefix = highImpactCount == schedules.count ? "\(schedules.count) high-impact events" : "\(schedules.count) events"
-        let start = EventDateFormatter.timeString(from: schedules.first?.event.timestamp ?? Date(), useUTC: false, use24HourTime: false)
-        let end = EventDateFormatter.timeString(from: schedules.last?.event.timestamp ?? Date(), useUTC: false, use24HourTime: false)
+        let start = EventDateFormatter.timeString(from: schedules.first?.event.timestamp ?? Date(), timeZone: preferences.effectiveTimeZone, use24HourTime: preferences.use24HourTime)
+        let end = EventDateFormatter.timeString(from: schedules.last?.event.timestamp ?? Date(), timeZone: preferences.effectiveTimeZone, use24HourTime: preferences.use24HourTime)
         return "\(titlePrefix) between \(start)-\(end)"
     }
 
@@ -1653,7 +1702,7 @@ private enum CalendarNotificationError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .authorizationDenied:
-            "Notifications are disabled for Tickr."
+            "Notifications are disabled for Session Watch."
         case .eventAlreadyStarted:
             "This event has already started, so a reminder cannot be scheduled."
         case .reminderTimePassed:

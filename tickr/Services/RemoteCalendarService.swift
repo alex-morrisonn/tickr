@@ -1,5 +1,11 @@
 import Foundation
 
+private struct CalendarResponse: Codable {
+    let weekOf: String
+    let lastUpdated: Date
+    let events: [EconomicEvent]
+}
+
 final class RemoteCalendarService: CalendarService {
     static let calendarURL = URL(string: "https://raw.githubusercontent.com/alex-morrisonn/tickr/main/tickr/SampleData/calendar.json")!
     static let productionCacheLifetime: TimeInterval = 24 * 60 * 60
@@ -34,38 +40,64 @@ final class RemoteCalendarService: CalendarService {
         self.encoder = encoder
     }
 
-    func fetchEvents(from startDate: Date, to endDate: Date) async throws -> [EconomicEvent] {
-        let response = try await loadResponse(forceRefresh: false)
-        return filteredEvents(from: response.events, startDate: startDate, endDate: endDate)
+    func fetchEvents(from startDate: Date, to endDate: Date) async throws -> CalendarFetchResult {
+        let result = try await loadResponse(forceRefresh: false)
+        return filteredResult(from: result, startDate: startDate, endDate: endDate)
     }
 
-    func refreshEvents(from startDate: Date, to endDate: Date) async throws -> [EconomicEvent] {
-        let response = try await loadResponse(forceRefresh: true)
-        return filteredEvents(from: response.events, startDate: startDate, endDate: endDate)
+    func refreshEvents(from startDate: Date, to endDate: Date) async throws -> CalendarFetchResult {
+        let result = try await loadResponse(forceRefresh: true)
+        return filteredResult(from: result, startDate: startDate, endDate: endDate)
     }
 
-    private func filteredEvents(from events: [EconomicEvent], startDate: Date, endDate: Date) -> [EconomicEvent] {
-        events
-            .filter { $0.timestamp >= startDate && $0.timestamp <= endDate }
-            .sorted { $0.timestamp < $1.timestamp }
+    private func filteredResult(from result: CalendarFetchResult, startDate: Date, endDate: Date) -> CalendarFetchResult {
+        CalendarFetchResult(
+            events: result.events
+                .filter { $0.timestamp >= startDate && $0.timestamp <= endDate }
+                .sorted { $0.timestamp < $1.timestamp },
+            source: result.source,
+            lastUpdated: result.lastUpdated,
+            isFallback: result.isFallback
+        )
     }
 
-    private func loadResponse(forceRefresh: Bool) async throws -> CalendarResponse {
+    private func loadResponse(forceRefresh: Bool) async throws -> CalendarFetchResult {
         do {
             if !forceRefresh, !bypassCache, try isCacheFresh() {
-                return try loadCachedResponse()
+                let cachedResponse = try loadCachedResponse()
+                return CalendarFetchResult(
+                    events: cachedResponse.events,
+                    source: .cache,
+                    lastUpdated: cachedResponse.lastUpdated,
+                    isFallback: false
+                )
             }
 
             let remoteResponse = try await fetchRemoteResponse()
             try cache(response: remoteResponse)
-            return remoteResponse
+            return CalendarFetchResult(
+                events: remoteResponse.events,
+                source: .remote,
+                lastUpdated: remoteResponse.lastUpdated,
+                isFallback: false
+            )
         } catch {
             if let cachedResponse = try? loadCachedResponse() {
-                return cachedResponse
+                return CalendarFetchResult(
+                    events: cachedResponse.events,
+                    source: .cache,
+                    lastUpdated: cachedResponse.lastUpdated,
+                    isFallback: true
+                )
             }
 
             if let bundledResponse = try? loadBundledResponse() {
-                return bundledResponse
+                return CalendarFetchResult(
+                    events: bundledResponse.events,
+                    source: .bundled,
+                    lastUpdated: bundledResponse.lastUpdated,
+                    isFallback: true
+                )
             }
 
             throw RemoteCalendarServiceError.noDataAvailable

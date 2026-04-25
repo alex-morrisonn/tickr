@@ -34,6 +34,17 @@ enum NotificationAuthorizationStore {
         }
     }
 
+    static func canScheduleNotificationsWithoutPrompt() async -> Bool {
+        switch await authorizationStatus() {
+        case .authorized, .provisional, .ephemeral:
+            return true
+        case .denied, .notDetermined:
+            return false
+        @unknown default:
+            return false
+        }
+    }
+
     @MainActor
     static func openSystemSettings() {
         guard let url = URL(string: UIApplication.openSettingsURLString) else {

@@ -19,15 +19,19 @@ enum MarketActivityTier: String {
 
 struct EstimatedMarketActivityService: MarketActivityService {
     func snapshot(at date: Date, events: [EconomicEvent]) -> MarketActivitySnapshot {
-        let score = activityScore(at: date, events: events)
+        let relevantEvents = eventsRelevantToDisplayedDay(containing: date, events: events)
+        let score = activityScore(at: date, events: relevantEvents)
 
         return MarketActivitySnapshot(
             score: score,
             tier: tier(for: score),
-            statusText: statusText(at: date, score: score, events: events),
-            sparklineSamples: sparklineSamples(for: date, events: events)
+            statusText: statusText(at: date, score: score, events: relevantEvents),
+            sparklineSamples: cachedSparklineSamples(for: date, events: relevantEvents)
         )
     }
+
+    private static let cacheLock = NSLock()
+    private static var sparklineSampleCache: [SparklineCacheKey: [Double]] = [:]
 
     private func activityScore(at date: Date, events: [EconomicEvent]) -> Double {
         guard SessionPresentation.isForexMarketOpen(at: date) else {
@@ -98,6 +102,28 @@ struct EstimatedMarketActivityService: MarketActivityService {
         return smoothed(samples: rawSamples)
     }
 
+    private func cachedSparklineSamples(for date: Date, events: [EconomicEvent]) -> [Double] {
+        let key = SparklineCacheKey(date: date, events: events)
+
+        Self.cacheLock.lock()
+        if let cachedSamples = Self.sparklineSampleCache[key] {
+            Self.cacheLock.unlock()
+            return cachedSamples
+        }
+        Self.cacheLock.unlock()
+
+        let samples = sparklineSamples(for: date, events: events)
+
+        Self.cacheLock.lock()
+        Self.sparklineSampleCache[key] = samples
+        if Self.sparklineSampleCache.count > 12 {
+            Self.sparklineSampleCache.remove(at: Self.sparklineSampleCache.startIndex)
+        }
+        Self.cacheLock.unlock()
+
+        return samples
+    }
+
     private func sessionWeight(for definition: ForexSessionDefinition) -> Double {
         switch definition {
         case .asian:
@@ -132,6 +158,19 @@ struct EstimatedMarketActivityService: MarketActivityService {
         }
 
         return min(lift, 0.24)
+    }
+
+    private func eventsRelevantToDisplayedDay(containing date: Date, events: [EconomicEvent]) -> [EconomicEvent] {
+        let activeWindow: TimeInterval = 90 * 60
+        let calendar = Calendar.current
+        let dayInterval = calendar.dateInterval(of: .day, for: date)
+            ?? DateInterval(start: calendar.startOfDay(for: date), duration: 24 * 60 * 60)
+        let lowerBound = dayInterval.start.addingTimeInterval(-activeWindow)
+        let upperBound = dayInterval.end.addingTimeInterval(activeWindow)
+
+        return events.filter { event in
+            event.timestamp >= lowerBound && event.timestamp <= upperBound
+        }
     }
 
     private func nearestMarketMovingEvent(to date: Date, events: [EconomicEvent]) -> EconomicEvent? {
@@ -224,6 +263,18 @@ struct EstimatedMarketActivityService: MarketActivityService {
 
             return (weightedTotal / totalWeight).clamped(to: 0...1)
         }
+    }
+}
+
+private struct SparklineCacheKey: Hashable {
+    let dayStart: TimeInterval
+    let eventIDs: [String]
+
+    init(date: Date, events: [EconomicEvent]) {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        self.dayStart = startOfDay.timeIntervalSinceReferenceDate
+        self.eventIDs = events.map(\.id)
     }
 }
 

@@ -10,12 +10,28 @@
 		1E8763C12F94D086001B4284 /* NotificationAuthorizationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E8763BF2F94D086001B4284 /* NotificationAuthorizationStore.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		1E74B27B2F99BA76008AF26C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1EC75FB02F90E1C2003B6F09 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1EC75FB72F90E1C2003B6F09;
+			remoteInfo = tickr;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
+		1E74B2772F99BA76008AF26C /* tickrTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = tickrTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1E8763BF2F94D086001B4284 /* NotificationAuthorizationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationAuthorizationStore.swift; sourceTree = "<group>"; };
 		1EC75FB82F90E1C2003B6F09 /* tickr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = tickr.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		1E74B2782F99BA76008AF26C /* tickrTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = tickrTests;
+			sourceTree = "<group>";
+		};
 		1EC75FBA2F90E1C2003B6F09 /* tickr */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = tickr;
@@ -24,6 +40,13 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		1E74B2742F99BA76008AF26C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		1EC75FB52F90E1C2003B6F09 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -38,6 +61,7 @@
 			isa = PBXGroup;
 			children = (
 				1EC75FBA2F90E1C2003B6F09 /* tickr */,
+				1E74B2782F99BA76008AF26C /* tickrTests */,
 				1EC75FB92F90E1C2003B6F09 /* Products */,
 				1EC75FC62F90E296003B6F09 /* Models */,
 				1EC75FC72F90E296003B6F09 /* Services */,
@@ -52,6 +76,7 @@
 			isa = PBXGroup;
 			children = (
 				1EC75FB82F90E1C2003B6F09 /* tickr.app */,
+				1E74B2772F99BA76008AF26C /* tickrTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -102,6 +127,29 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		1E74B2762F99BA76008AF26C /* tickrTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1E74B27F2F99BA76008AF26C /* Build configuration list for PBXNativeTarget "tickrTests" */;
+			buildPhases = (
+				1E74B2732F99BA76008AF26C /* Sources */,
+				1E74B2742F99BA76008AF26C /* Frameworks */,
+				1E74B2752F99BA76008AF26C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				1E74B27C2F99BA76008AF26C /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				1E74B2782F99BA76008AF26C /* tickrTests */,
+			);
+			name = tickrTests;
+			packageProductDependencies = (
+			);
+			productName = tickrTests;
+			productReference = 1E74B2772F99BA76008AF26C /* tickrTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		1EC75FB72F90E1C2003B6F09 /* tickr */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 1EC75FC32F90E1C2003B6F09 /* Build configuration list for PBXNativeTarget "tickr" */;
@@ -134,6 +182,10 @@
 				LastSwiftUpdateCheck = 2640;
 				LastUpgradeCheck = 2640;
 				TargetAttributes = {
+					1E74B2762F99BA76008AF26C = {
+						CreatedOnToolsVersion = 26.4;
+						TestTargetID = 1EC75FB72F90E1C2003B6F09;
+					};
 					1EC75FB72F90E1C2003B6F09 = {
 						CreatedOnToolsVersion = 26.4;
 					};
@@ -154,11 +206,19 @@
 			projectRoot = "";
 			targets = (
 				1EC75FB72F90E1C2003B6F09 /* tickr */,
+				1E74B2762F99BA76008AF26C /* tickrTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		1E74B2752F99BA76008AF26C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		1EC75FB62F90E1C2003B6F09 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -169,6 +229,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		1E74B2732F99BA76008AF26C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		1EC75FB42F90E1C2003B6F09 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -179,7 +246,57 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		1E74B27C2F99BA76008AF26C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1EC75FB72F90E1C2003B6F09 /* tickr */;
+			targetProxy = 1E74B27B2F99BA76008AF26C /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		1E74B27D2F99BA76008AF26C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 9282G9F23C;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.alexmorrison.tickrTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/tickr.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/tickr";
+			};
+			name = Debug;
+		};
+		1E74B27E2F99BA76008AF26C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 9282G9F23C;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.alexmorrison.tickrTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/tickr.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/tickr";
+			};
+			name = Release;
+		};
 		1EC75FC12F90E1C2003B6F09 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -311,6 +428,7 @@
 				DEVELOPMENT_TEAM = 9282G9F23C;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Session Watch";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -344,6 +462,7 @@
 				DEVELOPMENT_TEAM = 9282G9F23C;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Session Watch";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -370,6 +489,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		1E74B27F2F99BA76008AF26C /* Build configuration list for PBXNativeTarget "tickrTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1E74B27D2F99BA76008AF26C /* Debug */,
+				1E74B27E2F99BA76008AF26C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		1EC75FB32F90E1C2003B6F09 /* Build configuration list for PBXProject "tickr" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

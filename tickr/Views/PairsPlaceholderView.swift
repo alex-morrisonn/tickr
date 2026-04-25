@@ -107,7 +107,7 @@ struct PairsPlaceholderView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Text("Tickr")
+                Text("Session Watch")
                     .font(.system(size: 20, weight: .bold, design: .rounded))
                     .foregroundStyle(TickrPalette.text)
             }
@@ -186,7 +186,7 @@ struct PairsPlaceholderView: View {
                             .font(.headline)
                             .foregroundStyle(TickrPalette.text)
 
-                        Text("Select the pairs you trade and Tickr will surface the events that matter most this week.")
+                        Text("Select the pairs you trade and Session Watch will surface the events that matter most this week.")
                             .font(.subheadline)
                             .foregroundStyle(TickrPalette.muted)
 
@@ -317,7 +317,7 @@ struct PairsPlaceholderView: View {
         }
 
         if let nextCatalyst {
-            return "\(selectedPairs.count) pairs watched, \(highImpactEventsForSelectedPairs) high-impact catalysts this week. Next is \(nextCatalyst.symbol) \(RelativeDateTimeFormatter().localizedString(for: nextCatalyst.event.timestamp, relativeTo: Date()))."
+            return "\(selectedPairs.count) pairs watched, \(highImpactEventsForSelectedPairs) high-impact catalysts this week. Next is \(nextCatalyst.symbol) \(EventDateFormatter.relativeString(for: nextCatalyst.event.timestamp))."
         }
 
         if totalEventsForSelectedPairs == 0 {
@@ -332,7 +332,7 @@ struct PairsPlaceholderView: View {
             return "None"
         }
 
-        return RelativeDateTimeFormatter().localizedString(for: nextCatalyst.event.timestamp, relativeTo: Date())
+        return EventDateFormatter.relativeString(for: nextCatalyst.event.timestamp)
     }
 
     private var watchlistSummaryText: String {
@@ -419,7 +419,7 @@ private struct PairExposureRow: View {
                 if let event = summary.nextEvent {
                     Text(EventDateFormatter.timeString(
                         from: event.timestamp,
-                        useUTC: false,
+                        timeZone: preferences.effectiveTimeZone,
                         use24HourTime: preferences.use24HourTime
                     ))
                     .font(.caption.monospacedDigit())
@@ -435,7 +435,7 @@ private struct PairExposureRow: View {
     }
 
     private func eventMetadata(for event: EconomicEvent) -> String {
-        let day = EventDateFormatter.dayString(from: event.timestamp, useUTC: false)
+        let day = EventDateFormatter.dayString(from: event.timestamp, timeZone: preferences.effectiveTimeZone)
         let category = EventPresentation.categoryLabel(for: event.category)
         return "\(day) • \(category) • \(event.currencyCode)"
     }
@@ -540,13 +540,13 @@ private struct PairCatalystTimelineRow: View {
             VStack(alignment: .trailing, spacing: 2) {
                 Text(EventDateFormatter.timeString(
                     from: catalyst.event.timestamp,
-                    useUTC: false,
+                    timeZone: preferences.effectiveTimeZone,
                     use24HourTime: preferences.use24HourTime
                 ))
                 .font(.caption.monospacedDigit().weight(.semibold))
                 .foregroundStyle(TickrPalette.text)
 
-                Text(RelativeDateTimeFormatter().localizedString(for: catalyst.event.timestamp, relativeTo: Date()))
+                Text(EventDateFormatter.relativeString(for: catalyst.event.timestamp))
                     .font(.caption2)
                     .foregroundStyle(TickrPalette.muted)
             }
@@ -579,7 +579,7 @@ private struct PairCatalystTimelineRow: View {
                     .font(.subheadline)
                     .foregroundStyle(TickrPalette.text)
 
-                Text("\(EventDateFormatter.dayString(from: catalyst.event.timestamp, useUTC: false)) • \(catalyst.event.currencyCode)")
+                Text("\(EventDateFormatter.dayString(from: catalyst.event.timestamp, timeZone: preferences.effectiveTimeZone)) • \(catalyst.event.currencyCode)")
                     .font(.caption)
                     .foregroundStyle(TickrPalette.muted)
             }
@@ -796,13 +796,13 @@ private struct PairEventsView: View {
                                             Spacer()
 
                                             VStack(alignment: .trailing, spacing: 4) {
-                                                Text(EventDateFormatter.dayString(from: event.timestamp, useUTC: false))
+                                                Text(EventDateFormatter.dayString(from: event.timestamp, timeZone: preferences.effectiveTimeZone))
                                                     .font(.caption.weight(.semibold))
                                                     .foregroundStyle(TickrPalette.muted)
 
                                                 Text(EventDateFormatter.timeString(
                                                     from: event.timestamp,
-                                                    useUTC: false,
+                                                    timeZone: preferences.effectiveTimeZone,
                                                     use24HourTime: preferences.use24HourTime
                                                 ))
                                                 .font(.caption.monospacedDigit())
@@ -961,7 +961,7 @@ private struct PairDashboardSummary: Identifiable {
 
     var exposureDescription: String {
         if let nextEvent {
-            return "Next catalyst \(RelativeDateTimeFormatter().localizedString(for: nextEvent.timestamp, relativeTo: Date()))."
+            return "Next catalyst \(EventDateFormatter.relativeString(for: nextEvent.timestamp))."
         }
 
         if events.isEmpty {
@@ -971,9 +971,9 @@ private struct PairDashboardSummary: Identifiable {
         return "\(events.count) events mapped to this pair this week."
     }
 
-    var statusHeadline: String {
+    func statusHeadline(timeZone: TimeZone) -> String {
         if let nextEvent {
-            return EventDateFormatter.dayString(from: nextEvent.timestamp, useUTC: false)
+            return EventDateFormatter.dayString(from: nextEvent.timestamp, timeZone: timeZone)
         }
 
         return "No catalyst"
@@ -984,7 +984,7 @@ private struct PairDashboardSummary: Identifiable {
             return "None"
         }
 
-        return RelativeDateTimeFormatter().localizedString(for: nextEvent.timestamp, relativeTo: Date())
+        return EventDateFormatter.relativeString(for: nextEvent.timestamp)
     }
 
     var normalizedIntensity: CGFloat {

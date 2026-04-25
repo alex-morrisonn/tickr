@@ -144,6 +144,21 @@ final class UserPreferences {
         }
     }
 
+    var watchedPairCurrencyCodes: Set<String> {
+        Set(watchedPairSymbols.flatMap(Self.currencyCodes(inPairSymbol:)))
+    }
+
+    func matchesWatchedPair(_ event: EconomicEvent) -> Bool {
+        let normalizedEventPairs = Set(event.relatedPairs.map(Self.normalizePairSymbol(_:)))
+        let normalizedWatchedPairs = Set(watchedPairSymbols.map(Self.normalizePairSymbol(_:)))
+
+        if !normalizedEventPairs.isDisjoint(with: normalizedWatchedPairs) {
+            return true
+        }
+
+        return watchedPairCurrencyCodes.contains(event.currencyCode.uppercased())
+    }
+
     func reset() {
         minimumImpact = .low
         selectedCurrencyCode = nil
@@ -154,6 +169,7 @@ final class UserPreferences {
         useUTC = false
         manualTimeZoneIdentifier = nil
         preferredAppearance = .dark
+        watchedPairSymbols = []
         highImpactNotificationLeadTimeMinutes = 30
         mediumImpactNotificationLeadTimeMinutes = 15
         lowImpactNotificationLeadTimeMinutes = 0
@@ -215,6 +231,24 @@ final class UserPreferences {
         }
 
         return minutes >= quietHoursStartMinutes && minutes < quietHoursEndMinutes
+    }
+
+    private static func currencyCodes(inPairSymbol symbol: String) -> [String] {
+        let normalizedSymbol = normalizePairSymbol(symbol)
+        guard normalizedSymbol.count == 6 else {
+            return []
+        }
+
+        return [
+            String(normalizedSymbol.prefix(3)),
+            String(normalizedSymbol.suffix(3))
+        ]
+    }
+
+    private static func normalizePairSymbol(_ symbol: String) -> String {
+        symbol
+            .uppercased()
+            .filter(\.isLetter)
     }
 }
 

@@ -55,7 +55,7 @@ struct AppSettingsView: View {
         }
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Text("Tickr")
+                Text("Session Watch")
                     .font(.system(size: 20, weight: .bold, design: .rounded))
                     .foregroundStyle(TickrPalette.text)
             }
@@ -211,11 +211,11 @@ struct AppSettingsView: View {
                 TickrInfoRow(
                     label: "Last updated",
                     value: viewModel.lastRefreshDate.map {
-                        RelativeDateTimeFormatter().localizedString(for: $0, relativeTo: Date())
+                        EventDateFormatter.relativeString(for: $0)
                     } ?? "No refresh yet"
                 )
 
-                TickrInfoRow(label: "Data source", value: "Tickr calendar feed")
+                TickrInfoRow(label: "Data source", value: "Session Watch calendar feed")
 
                 Button {
                     Task {
@@ -251,7 +251,7 @@ struct AppSettingsView: View {
                 TickrInfoRow(label: "App version", value: appVersion)
 
                 settingsLinkButton(title: "Send Feedback", action: {
-                    openURL(URL(string: "mailto:feedback@tickr.app?subject=Tickr%20Feedback")!)
+                    openURL(URL(string: "mailto:feedback@tickr.app?subject=Session%20Watch%20Feedback")!)
                 })
 
                 settingsLinkButton(title: "Privacy Policy", action: {
@@ -423,7 +423,7 @@ struct AppSettingsView: View {
                 notificationMessage = error.localizedDescription
             }
         @unknown default:
-            notificationMessage = "Tickr could not confirm your notification status."
+            notificationMessage = "Session Watch could not confirm your notification status."
         }
     }
 
