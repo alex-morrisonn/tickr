@@ -648,6 +648,18 @@ private struct EconomicEventRow: View {
     let preferences: UserPreferences
     let isNotificationScheduled: Bool
 
+    private var eventTypeLabel: String {
+        event.isHoliday ? "Holiday" : event.impactLevel.label
+    }
+
+    private var eventTypeColor: Color {
+        event.isHoliday ? .gray : event.impactLevel.color
+    }
+
+    private var eventDotColor: Color {
+        event.isHoliday ? .gray : event.impactLevel.color
+    }
+
     var body: some View {
         TickrCard {
             VStack(alignment: .leading, spacing: 12) {
@@ -664,20 +676,22 @@ private struct EconomicEventRow: View {
                     .frame(width: 72, alignment: .leading)
 
                     Circle()
-                        .fill(event.impactLevel.color)
+                        .fill(eventDotColor)
                         .frame(width: 10, height: 10)
                         .padding(.top, 5)
 
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(alignment: .top) {
                             VStack(alignment: .leading, spacing: 6) {
-                                HStack(spacing: 8) {
-                                    Text(CountryDisplay.flag(for: event.countryCode))
-                                    Text(event.title)
-                                        .font(.headline)
-                                        .foregroundStyle(TickrPalette.text)
-                                        .multilineTextAlignment(.leading)
-                                }
+                                TickrPill(
+                                    text: "Affects \(event.currencyCode)",
+                                    tint: TickrPalette.accentSoft
+                                )
+
+                                Text(event.title)
+                                    .font(.headline)
+                                    .foregroundStyle(TickrPalette.text)
+                                    .multilineTextAlignment(.leading)
 
                                 rowMetadata
                             }
@@ -700,13 +714,9 @@ private struct EconomicEventRow: View {
 
     private var rowMetadata: some View {
         HStack(spacing: 8) {
-            Text(event.currencyCode)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(TickrPalette.text)
-
-            Text(event.impactLevel.label)
+            Text(eventTypeLabel)
                 .font(.caption)
-                .foregroundStyle(event.impactLevel.color)
+                .foregroundStyle(eventTypeColor)
 
             if let category = event.category {
                 Text(category)
@@ -718,27 +728,51 @@ private struct EconomicEventRow: View {
     }
 
     private var eventMetricsSummary: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 12) {
-                compactMetric(label: "Forecast", value: event.forecast)
-                compactMetric(label: "Previous", value: event.previous)
-                compactMetric(label: "Actual", value: EventPresentation.actualResultsPlaceholderShort)
-            }
+        let metrics = metricItems
 
-            VStack(alignment: .leading, spacing: 6) {
-                compactMetric(label: "Forecast", value: event.forecast)
-                compactMetric(label: "Previous", value: event.previous)
-                compactMetric(label: "Actual", value: EventPresentation.actualResultsPlaceholderShort)
+        return Group {
+            if !metrics.isEmpty {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 12) {
+                        ForEach(metrics, id: \.label) { metric in
+                            compactMetric(label: metric.label, value: metric.value)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(metrics, id: \.label) { metric in
+                            compactMetric(label: metric.label, value: metric.value)
+                        }
+                    }
+                }
             }
         }
     }
 
-    private func compactMetric(label: String, value: String?) -> some View {
+    private var metricItems: [(label: String, value: String)] {
+        var items: [(label: String, value: String)] = []
+
+        if let forecast = event.forecast {
+            items.append((label: "Forecast", value: forecast))
+        }
+
+        if let previous = event.previous {
+            items.append((label: "Previous", value: previous))
+        }
+
+        if !event.isHoliday, let actual = event.actual {
+            items.append((label: "Actual", value: actual))
+        }
+
+        return items
+    }
+
+    private func compactMetric(label: String, value: String) -> some View {
         HStack(spacing: 6) {
             Text(label)
                 .font(.caption)
                 .foregroundStyle(TickrPalette.muted)
-            Text(value ?? "—")
+            Text(value)
                 .font(.caption.weight(.semibold))
                 .monospacedDigit()
                 .foregroundStyle(TickrPalette.text)
@@ -775,6 +809,14 @@ private struct EconomicEventDetailView: View {
 
     private var sourceAttribution: String {
         "Source: Session Watch calendar feed"
+    }
+
+    private var eventTypeLabel: String {
+        event.isHoliday ? "Holiday" : event.impactLevel.label
+    }
+
+    private var eventTypeTint: Color {
+        event.isHoliday ? TickrPalette.surfaceStrong : event.impactLevel.color.opacity(0.18)
     }
 
     var body: some View {
@@ -826,8 +868,8 @@ private struct EconomicEventDetailView: View {
                     .foregroundStyle(TickrPalette.text)
 
                 HStack(spacing: 10) {
-                    TickrPill(text: "\(CountryDisplay.flag(for: event.countryCode)) \(event.currencyCode)")
-                    TickrPill(text: event.impactLevel.label, tint: event.impactLevel.color.opacity(0.18))
+                    TickrPill(text: "Affects \(event.currencyCode)", tint: TickrPalette.accentSoft)
+                    TickrPill(text: eventTypeLabel, tint: eventTypeTint)
                 }
 
                 if categoryDisplayName != "Macroeconomic" || event.category != nil {
@@ -865,29 +907,23 @@ private struct EconomicEventDetailView: View {
                     .foregroundStyle(TickrPalette.text)
 
                 ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 12) {
-                        DetailValueColumn(title: "Forecast", primaryValue: event.forecast ?? "—")
-                        DetailValueColumn(title: "Previous", primaryValue: event.previous ?? "—")
-                        DetailValueColumn(
-                            title: "Actual",
-                            primaryValue: EventPresentation.actualResultsPlaceholderShort,
-                            secondaryValue: EventPresentation.actualResultsPlaceholderLong
-                        )
-                    }
+                    if event.hasNumericContext {
+                        HStack(spacing: 12) {
+                            detailMetrics
+                        }
 
-                    VStack(spacing: 12) {
-                        DetailValueColumn(title: "Forecast", primaryValue: event.forecast ?? "—")
-                        DetailValueColumn(title: "Previous", primaryValue: event.previous ?? "—")
-                        DetailValueColumn(
-                            title: "Actual",
-                            primaryValue: EventPresentation.actualResultsPlaceholderShort,
-                            secondaryValue: EventPresentation.actualResultsPlaceholderLong
-                        )
+                        VStack(spacing: 12) {
+                            detailMetrics
+                        }
+                    } else {
+                        metricEmptyState
                     }
                 }
 
-                Divider()
-                    .overlay(TickrPalette.stroke)
+                if event.hasNumericContext {
+                    Divider()
+                        .overlay(TickrPalette.stroke)
+                }
 
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Affected Pairs")
@@ -1002,6 +1038,31 @@ private struct EconomicEventDetailView: View {
                 }
             }
         )
+    }
+
+    @ViewBuilder
+    private var detailMetrics: some View {
+        if let forecast = event.forecast {
+            DetailValueColumn(title: "Forecast", primaryValue: forecast)
+        }
+
+        if let previous = event.previous {
+            DetailValueColumn(title: "Previous", primaryValue: previous)
+        }
+
+        if !event.isHoliday {
+            DetailValueColumn(
+                title: "Actual",
+                primaryValue: event.actual ?? EventPresentation.actualResultsPlaceholderShort,
+                secondaryValue: event.actual == nil ? EventPresentation.actualResultsPlaceholderLong : nil
+            )
+        }
+    }
+
+    private var metricEmptyState: some View {
+        Text(event.isHoliday ? "Market holidays do not have forecast or previous values." : "No forecast, previous, or actual values are available for this event.")
+            .font(.subheadline)
+            .foregroundStyle(TickrPalette.muted)
     }
 }
 
@@ -1138,7 +1199,7 @@ enum EventPresentation {
     }
 
     static let actualResultsPlaceholderShort = "Pending"
-    static let actualResultsPlaceholderLong = "Actual results are not implemented yet and will be added once the calendar uses a live API feed."
+    static let actualResultsPlaceholderLong = "The official result has not been published here yet."
 
     static func actualResultLabel(for event: EconomicEvent) -> String {
         switch actualComparison(for: event) {
@@ -1167,6 +1228,10 @@ enum EventPresentation {
     static func explainer(for event: EconomicEvent) -> String {
         let currency = event.currencyCode
         let title = event.title.localizedLowercase
+
+        if event.isHoliday {
+            return "Holiday closures reduce participation from \(currency)-linked banks and desks, which can thin liquidity and distort normal session behavior. Price action may be slower for part of the day and then become jumpier when liquidity returns. Treat these sessions differently from standard low-impact data releases because the main effect is market availability, not a forecast miss."
+        }
 
         if title.contains("cpi") || title.contains("inflation") {
             return "The Consumer Price Index tracks how quickly consumer prices are rising across the economy. A hotter reading than expected usually pushes rate expectations higher and can move \(currency) pairs sharply. This is one of the most market-moving inflation releases on the calendar."
@@ -1320,8 +1385,11 @@ private struct EventShareCard: View {
                     .foregroundStyle(TickrPalette.text)
 
                 HStack(spacing: 10) {
-                    TickrPill(text: "\(CountryDisplay.flag(for: event.countryCode)) \(event.currencyCode)")
-                    TickrPill(text: event.impactLevel.label, tint: event.impactLevel.color.opacity(0.18))
+                    TickrPill(text: "Affects \(event.currencyCode)", tint: TickrPalette.accentSoft)
+                    TickrPill(
+                        text: event.isHoliday ? "Holiday" : event.impactLevel.label,
+                        tint: event.isHoliday ? TickrPalette.surfaceStrong : event.impactLevel.color.opacity(0.18)
+                    )
                     TickrPill(text: categoryDisplayName)
                 }
 
@@ -1333,15 +1401,39 @@ private struct EventShareCard: View {
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(TickrPalette.accent)
 
-                HStack(spacing: 12) {
-                    shareMetric(title: "Forecast", value: event.forecast ?? "—")
-                    shareMetric(title: "Previous", value: event.previous ?? "—")
-                    shareMetric(title: "Actual", value: EventPresentation.actualResultsPlaceholderShort)
+                if shareMetricItems.isEmpty {
+                    Text(event.isHoliday ? "Market holiday" : "No forecast or previous data")
+                        .font(.headline)
+                        .foregroundStyle(TickrPalette.muted)
+                } else {
+                    HStack(spacing: 12) {
+                        ForEach(shareMetricItems, id: \.title) { metric in
+                            shareMetric(title: metric.title, value: metric.value)
+                        }
+                    }
                 }
             }
             .padding(28)
         }
         .frame(width: 1080, height: 1350)
+    }
+
+    private var shareMetricItems: [(title: String, value: String)] {
+        var items: [(title: String, value: String)] = []
+
+        if let forecast = event.forecast {
+            items.append((title: "Forecast", value: forecast))
+        }
+
+        if let previous = event.previous {
+            items.append((title: "Previous", value: previous))
+        }
+
+        if !event.isHoliday {
+            items.append((title: "Actual", value: event.actual ?? EventPresentation.actualResultsPlaceholderShort))
+        }
+
+        return items
     }
 
     private func shareMetric(title: String, value: String) -> some View {
@@ -1660,6 +1752,16 @@ enum CalendarNotificationStore {
 
     private static func defaultBody(for event: EconomicEvent, leadTimeMinutes: Int, preferences: UserPreferences) -> String {
         let watchedPairs = event.relatedPairs.filter { preferences.watchedPairSymbols.contains($0) }
+
+        if event.isHoliday {
+            if watchedPairs.isEmpty {
+                return "Liquidity may be thinner around this market holiday."
+            }
+
+            let pairList = watchedPairs.prefix(2).joined(separator: " and ")
+            return "Your \(pairList) pairs may be affected by thinner holiday liquidity."
+        }
+
         let forecast = event.forecast ?? "—"
         let previous = event.previous ?? "—"
 

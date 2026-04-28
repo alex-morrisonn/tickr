@@ -4,6 +4,43 @@ private struct CalendarResponse: Codable {
     let weekOf: String
     let lastUpdated: Date
     let events: [EconomicEvent]
+
+    init(weekOf: String, lastUpdated: Date, events: [EconomicEvent]) {
+        self.weekOf = weekOf
+        self.lastUpdated = lastUpdated
+        self.events = events
+    }
+
+    init(from decoder: Decoder) throws {
+        if let container = try? decoder.container(keyedBy: CodingKeys.self) {
+            self.weekOf = try container.decode(String.self, forKey: .weekOf)
+            self.lastUpdated = try container.decode(Date.self, forKey: .lastUpdated)
+            self.events = try container.decode([EconomicEvent].self, forKey: .events)
+            return
+        }
+
+        let container = try decoder.singleValueContainer()
+        let events = try container.decode([EconomicEvent].self)
+
+        self.events = events
+        self.lastUpdated = events.map(\.timestamp).max() ?? Date()
+        self.weekOf = Self.inferredWeekOf(from: events)
+    }
+
+    private static func inferredWeekOf(from events: [EconomicEvent]) -> String {
+        guard let firstTimestamp = events.map(\.timestamp).min() else {
+            return ""
+        }
+
+        let calendar = Calendar.utcGregorian
+        let startOfWeek = calendar.dateInterval(of: .weekOfYear, for: firstTimestamp)?.start ?? firstTimestamp
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: startOfWeek)
+    }
 }
 
 final class RemoteCalendarService: CalendarService {
@@ -17,19 +54,22 @@ final class RemoteCalendarService: CalendarService {
     private let now: @Sendable () -> Date
     private let cacheLifetime: TimeInterval
     private let bypassCache: Bool
+    private let preferBundledSource: Bool
 
     init(
         session: URLSession = .shared,
         fileManager: FileManager = .default,
         now: @escaping @Sendable () -> Date = Date.init,
         cacheLifetime: TimeInterval? = nil,
-        bypassCache: Bool? = nil
+        bypassCache: Bool? = nil,
+        preferBundledSource: Bool? = nil
     ) {
         self.session = session
         self.fileManager = fileManager
         self.now = now
         self.cacheLifetime = cacheLifetime ?? Self.productionCacheLifetime
         self.bypassCache = bypassCache ?? Self.shouldBypassCacheFromRuntimeConfiguration
+        self.preferBundledSource = preferBundledSource ?? Self.shouldPreferBundledSourceFromRuntimeConfiguration
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -63,6 +103,16 @@ final class RemoteCalendarService: CalendarService {
 
     private func loadResponse(forceRefresh: Bool) async throws -> CalendarFetchResult {
         do {
+            if preferBundledSource {
+                let bundledResponse = try loadBundledResponse()
+                return CalendarFetchResult(
+                    events: bundledResponse.events,
+                    source: .bundled,
+                    lastUpdated: bundledResponse.lastUpdated,
+                    isFallback: false
+                )
+            }
+
             if !forceRefresh, !bypassCache, try isCacheFresh() {
                 let cachedResponse = try loadCachedResponse()
                 return CalendarFetchResult(
@@ -210,6 +260,23 @@ final class RemoteCalendarService: CalendarService {
         let processInfo = ProcessInfo.processInfo
         return processInfo.arguments.contains("-TickrDisableCalendarCache")
             || processInfo.environment["TICKR_DISABLE_CALENDAR_CACHE"] == "1"
+        #else
+        return false
+        #endif
+    }
+
+    private static var shouldPreferBundledSourceFromRuntimeConfiguration: Bool {
+        #if DEBUG
+        let processInfo = ProcessInfo.processInfo
+        if processInfo.arguments.contains("-TickrUseRemoteCalendar") {
+            return false
+        }
+
+        if processInfo.environment["TICKR_USE_REMOTE_CALENDAR"] == "1" {
+            return false
+        }
+
+        return true
         #else
         return false
         #endif

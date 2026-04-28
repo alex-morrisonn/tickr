@@ -54,6 +54,46 @@ struct EconomicEventDecodingTests {
         #expect(calendar.events.contains { $0.impactLevel == .high })
         #expect(calendar.events.contains { !$0.relatedPairs.isEmpty })
     }
+
+    @Test
+    func forexFactoryExportDecodesFromRawArraySchema() throws {
+        let json = """
+        [
+          {
+            "title": "Bank Holiday",
+            "country": "NZD",
+            "date": "2026-04-26T16:00:00-04:00",
+            "impact": "Holiday",
+            "forecast": "",
+            "previous": ""
+          },
+          {
+            "title": "Federal Funds Rate",
+            "country": "USD",
+            "date": "2026-04-29T14:00:00-04:00",
+            "impact": "High",
+            "forecast": "3.75%",
+            "previous": "3.75%"
+          }
+        ]
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let events = try decoder.decode([EconomicEvent].self, from: try #require(json.data(using: .utf8)))
+
+        #expect(events.count == 2)
+        #expect(events[0].currencyCode == "NZD")
+        #expect(events[0].countryCode == "NZ")
+        #expect(events[0].impactLevel == .low)
+        #expect(events[0].forecast == nil)
+        #expect(events[0].previous == nil)
+        #expect(!events[0].id.isEmpty)
+        #expect(events[0].relatedPairs == ["NZDUSD", "AUDNZD", "EURNZD"])
+        #expect(events[1].currencyCode == "USD")
+        #expect(events[1].countryCode == "US")
+        #expect(events[1].impactLevel == .high)
+    }
 }
 
 private struct CalendarFixture: Decodable {
